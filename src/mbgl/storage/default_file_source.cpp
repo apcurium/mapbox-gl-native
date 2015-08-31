@@ -37,7 +37,6 @@ DefaultFileSource::~DefaultFileSource() {
 }
 
 Request* DefaultFileSource::request(const Resource& resource,
-                                    uv_loop_t*,
                                     Callback callback) {
 
     if (!callback) {
