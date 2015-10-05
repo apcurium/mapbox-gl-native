@@ -20,6 +20,8 @@ class Q_DECL_EXPORT QMapboxGL : public QObject
     Q_PROPERTY(double bearing READ bearing WRITE setBearing)
 
 public:
+    typedef QPair<double, double> Coordinate;
+
     QMapboxGL(QObject *parent = 0);
     ~QMapboxGL();
 
@@ -51,9 +53,9 @@ public:
     double pitch() const;
     void setPitch(double pitch, int milliseconds = 0);
 
-    QPointF coordinate() const;
-    void setCoordinate(const QPointF &coordinate, int milliseconds = 0);
-    void setCoordinateZoom(const QPointF &coordinate, double zoom, int milliseconds = 0);
+    Coordinate coordinate() const;
+    void setCoordinate(const Coordinate &coordinate, int milliseconds = 0);
+    void setCoordinateZoom(const Coordinate &coordinate, double zoom, int milliseconds = 0);
 
     void setGestureInProgress(bool inProgress);
 
@@ -70,8 +72,8 @@ public:
 
     void setSprite(const QString &name, const QImage &sprite);
 
-    QPointF pixelForCoordinate(const QPointF &coordinate) const;
-    QPointF coordinateForPixel(const QPointF &pixel) const;
+    QPointF pixelForCoordinate(const Coordinate &coordinate) const;
+    Coordinate coordinateForPixel(const QPointF &pixel) const;
 
 public slots:
     void render();
