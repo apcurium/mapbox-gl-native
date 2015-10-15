@@ -31,6 +31,9 @@ public:
 
     void toggleDebug();
 
+    QString styleJSON() const;
+    QString styleURL() const;
+
     void setStyleJSON(const QString &style);
     void setStyleURL(const QString &url);
 
