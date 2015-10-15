@@ -84,19 +84,21 @@
         'xcode_settings': {
           'GCC_OPTIMIZATION_LEVEL': '0',
           'GCC_GENERATE_DEBUGGING_SYMBOLS': 'YES',
-          'DEAD_CODE_STRIPPING': 'NO',
           'GCC_INLINES_ARE_PRIVATE_EXTERN': 'NO',
+          'GCC_SYMBOLS_PRIVATE_EXTERN': 'NO',
+          'DEAD_CODE_STRIPPING': 'NO',
           'OTHER_CPLUSPLUSFLAGS': [ '-fno-omit-frame-pointer','-fwrapv', '-fstack-protector-all', '-fno-common']
         }
       },
       'Release': {
-        'cflags_cc': [ '-g', '-O3' ],
+        'cflags_cc': [ '-g', '-O3', '-fvisibility=hidden' ],
         'defines': [ 'NDEBUG' ],
         'xcode_settings': {
           'GCC_OPTIMIZATION_LEVEL': '3',
           'GCC_GENERATE_DEBUGGING_SYMBOLS': 'YES',
+          'GCC_INLINES_ARE_PRIVATE_EXTERN': 'YES',
+          'GCC_SYMBOLS_PRIVATE_EXTERN': 'YES',
           'DEAD_CODE_STRIPPING': 'NO',
-          'GCC_INLINES_ARE_PRIVATE_EXTERN': 'NO'
         }
       },
     },
