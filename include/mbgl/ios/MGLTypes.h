@@ -2,6 +2,9 @@
 
 #pragma once
 
+#define MBGL_PUBLIC __attribute__ ((visibility ("default")))
+#define MBGL_LOCAL  __attribute__ ((visibility ("hidden")))
+
 #if !__has_feature(nullability)
     #define NS_ASSUME_NONNULL_BEGIN
     #define NS_ASSUME_NONNULL_END
