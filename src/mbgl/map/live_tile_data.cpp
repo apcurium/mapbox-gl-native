@@ -6,7 +6,6 @@
 #include <mbgl/util/worker.hpp>
 #include <mbgl/util/work_request.hpp>
 #include <mbgl/style/style.hpp>
-#include <mbgl/style/style_bucket.hpp>
 
 #include <sstream>
 
@@ -81,11 +80,11 @@ LiveTileData::~LiveTileData() {
 }
 
 Bucket* LiveTileData::getBucket(const StyleLayer& layer) {
-    if (!isReady() || !layer.bucket) {
+    if (!isReady()) {
         return nullptr;
     }
 
-    const auto it = buckets.find(layer.bucket->name);
+    const auto it = buckets.find(layer.bucketName());
     if (it == buckets.end()) {
         return nullptr;
     }

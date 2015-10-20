@@ -1,6 +1,5 @@
 #include <mbgl/map/vector_tile_data.hpp>
 #include <mbgl/style/style_layer.hpp>
-#include <mbgl/style/style_bucket.hpp>
 #include <mbgl/map/source.hpp>
 #include <mbgl/text/collision_tile.hpp>
 #include <mbgl/storage/resource.hpp>
@@ -151,11 +150,7 @@ bool VectorTileData::parsePending(std::function<void()> callback) {
 }
 
 Bucket* VectorTileData::getBucket(const StyleLayer& layer) {
-    if (!layer.bucket) {
-        return nullptr;
-    }
-
-    const auto it = buckets.find(layer.bucket->name);
+    const auto it = buckets.find(layer.bucketName());
     if (it == buckets.end()) {
         return nullptr;
     }
