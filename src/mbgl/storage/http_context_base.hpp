@@ -4,7 +4,7 @@
 #include <mbgl/storage/request_base.hpp>
 #include <mbgl/storage/http_request_base.hpp>
 #include <mbgl/storage/network_status.hpp>
-#include <mbgl/util/uv_detail.hpp>
+#include <mbgl/util/async_task.hpp>
 
 #include <set>
 
@@ -12,14 +12,13 @@ namespace mbgl {
 
 class HTTPContextBase {
 public:
-    static std::unique_ptr<HTTPContextBase> createContext(uv_loop_t*);
+    static std::unique_ptr<HTTPContextBase> createContext();
 
-    HTTPContextBase(uv_loop_t*);
+    HTTPContextBase();
     virtual ~HTTPContextBase();
 
     virtual HTTPRequestBase* createRequest(const Resource&,
                                        RequestBase::Callback,
-                                       uv_loop_t*,
                                        std::shared_ptr<const Response>) = 0;
 
     void addRequest(HTTPRequestBase*);
@@ -29,7 +28,7 @@ private:
     void retryRequests();
 
     // Will be fired when the network status becomes reachable.
-    uv::async reachability;
+    util::AsyncTask reachability;
 
     // A list of all pending HTTPRequestImpls that we need to notify when the network status
     // changes.

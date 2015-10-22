@@ -81,11 +81,10 @@ void DefaultFileSource::cancel(Request *req) {
 // ----- Impl -----
 
 DefaultFileSource::Impl::Impl(FileCache* cache_, const std::string& root)
-    : loop(reinterpret_cast<uv_loop_t*>(util::RunLoop::getLoopHandle())),
-      cache(cache_),
+    : cache(cache_),
       assetRoot(root.empty() ? platform::assetRoot() : root),
-      assetContext(AssetContextBase::createContext(loop)),
-      httpContext(HTTPContextBase::createContext(loop)) {
+      assetContext(AssetContextBase::createContext()),
+      httpContext(HTTPContextBase::createContext()) {
 }
 
 DefaultFileRequest* DefaultFileSource::Impl::find(const Resource& resource) {
@@ -183,9 +182,9 @@ void DefaultFileSource::Impl::startRealRequest(DefaultFileRequest* request, std:
     };
 
     if (algo::starts_with(request->resource.url, "asset://")) {
-        request->realRequest = assetContext->createRequest(request->resource, callback, loop, assetRoot);
+        request->realRequest = assetContext->createRequest(request->resource, callback, assetRoot);
     } else {
-        request->realRequest = httpContext->createRequest(request->resource, callback, loop, response);
+        request->realRequest = httpContext->createRequest(request->resource, callback, response);
     }
 }
 

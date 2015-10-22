@@ -47,7 +47,6 @@ private:
     void notify(DefaultFileRequest*, std::shared_ptr<const Response>, FileCache::Hint);
 
     std::unordered_map<Resource, DefaultFileRequest, Resource::Hash> pending;
-    uv_loop_t* loop = nullptr;
     FileCache* cache = nullptr;
     const std::string assetRoot;
     std::unique_ptr<AssetContextBase> assetContext;
