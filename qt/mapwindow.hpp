@@ -14,7 +14,7 @@ class QWheelEvent;
 class MapWindow : public QGLWidget
 {
 public:
-    MapWindow();
+    MapWindow(const QMapboxGLSettings &);
 
 private:
     void changeStyle();

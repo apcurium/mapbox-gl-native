@@ -12,6 +12,26 @@ class QStringList;
 
 class QMapboxGLPrivate;
 
+class Q_DECL_EXPORT QMapboxGLSettings
+{
+public:
+    QMapboxGLSettings();
+
+    unsigned cacheDatabaseMaximumSize() const;
+    void setCacheDatabaseMaximumSize(unsigned);
+
+    QString cacheDatabasePath() const;
+    void setCacheDatabasePath(const QString &);
+
+    QString accessToken() const;
+    void setAccessToken(const QString &);
+
+private:
+    unsigned m_cacheMaximumSize;
+    QString m_cacheDatabasePath;
+    QString m_accessToken;
+};
+
 class Q_DECL_EXPORT QMapboxGL : public QObject
 {
     Q_OBJECT
@@ -35,11 +55,8 @@ public:
     typedef QPair<CoordinateSegments, QString> ShapeAnnotation;
     typedef QList<ShapeAnnotation> ShapeAnnotations;
 
-    QMapboxGL(QObject *parent = 0);
+    QMapboxGL(QObject *parent = 0, const QMapboxGLSettings& = QMapboxGLSettings());
     ~QMapboxGL();
-
-    void setAccessToken(const QString &token);
-    void setCacheDatabase(const QString &path, qint64 maximumSize=-1);
 
     void toggleDebug();
 
