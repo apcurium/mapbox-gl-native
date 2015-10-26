@@ -3,7 +3,6 @@
 #include <mbgl/geometry/elements_buffer.hpp>
 #include <mbgl/renderer/painter.hpp>
 #include <mbgl/style/style.hpp>
-#include <mbgl/style/style_properties.hpp>
 #include <mbgl/shader/line_shader.hpp>
 #include <mbgl/shader/linesdf_shader.hpp>
 #include <mbgl/shader/linepattern_shader.hpp>
@@ -42,7 +41,7 @@ void LineBucket::addGeometry(const std::vector<Coordinate>& vertices) {
         return;
     }
 
-    const float miterLimit = layout.join == JoinType::Bevel ? 1.05f : layout.miter_limit;
+    const float miterLimit = layout.join == JoinType::Bevel ? 1.05f : float(layout.miterLimit);
 
     const Coordinate firstVertex = vertices.front();
     const Coordinate lastVertex = vertices[len - 1];
@@ -54,7 +53,7 @@ void LineBucket::addGeometry(const std::vector<Coordinate>& vertices) {
     }
 
     const CapType beginCap = layout.cap;
-    const CapType endCap = closed ? CapType::Butt : layout.cap;
+    const CapType endCap = closed ? CapType::Butt : CapType(layout.cap);
 
     int8_t flip = 1;
     double distance = 0;
@@ -143,7 +142,7 @@ void LineBucket::addGeometry(const std::vector<Coordinate>& vertices) {
 
         if (middleVertex) {
             if (currentJoin == JoinType::Round) {
-                if (miterLength < layout.round_limit) {
+                if (miterLength < layout.roundLimit) {
                     currentJoin = JoinType::Miter;
                 } else if (miterLength <= 2) {
                     currentJoin = JoinType::FakeRound;

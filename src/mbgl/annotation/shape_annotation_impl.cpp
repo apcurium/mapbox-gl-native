@@ -30,8 +30,7 @@ void ShapeAnnotationImpl::updateStyle(Style& style) {
 
         std::unique_ptr<LineLayer> layer = std::make_unique<LineLayer>();
         layer->type = StyleLayerType::Line;
-
-        layer->layout.set(PropertyKey::LineJoin, ConstantFunction<JoinType>(JoinType::Round));
+        layer->layout.join = JoinType::Round;
 
         const LinePaintProperties& properties = shape.properties.get<LinePaintProperties>();
         ClassProperties paintProperties;

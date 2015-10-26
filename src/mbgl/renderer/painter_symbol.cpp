@@ -27,8 +27,7 @@ void Painter::renderSDF(SymbolBucket &bucket,
 {
     mat4 vtxMatrix = translatedMatrix(matrix, styleProperties.translate, id, styleProperties.translate_anchor);
 
-    bool aligned_with_map = (bucketProperties.rotation_alignment == RotationAlignmentType::Map);
-    bool skewed = aligned_with_map;
+    bool skewed = (bucketProperties.rotationAlignment == RotationAlignmentType::Map);
     mat4 exMatrix;
     float s;
     float gammaScale;
@@ -152,8 +151,8 @@ void Painter::renderSymbol(SymbolBucket& bucket, const SymbolLayer& layer, const
     }
 
     // TODO remove the `|| true` when #1673 is implemented
-    const bool drawAcrossEdges = !(layout.text.allow_overlap || layout.icon.allow_overlap ||
-          layout.text.ignore_placement || layout.icon.ignore_placement) || true;
+    const bool drawAcrossEdges = !(layout.text.allowOverlap || layout.icon.allowOverlap ||
+          layout.text.ignorePlacement || layout.icon.ignorePlacement) || true;
 
     // Disable the stencil test so that labels aren't clipped to tile boundaries.
     //
@@ -163,12 +162,12 @@ void Painter::renderSymbol(SymbolBucket& bucket, const SymbolLayer& layer, const
     config.stencilTest = drawAcrossEdges ? false : true;
 
     if (bucket.hasIconData()) {
-        config.depthTest = layout.icon.rotation_alignment == RotationAlignmentType::Map;
+        config.depthTest = layout.icon.rotationAlignment == RotationAlignmentType::Map;
 
         bool sdf = bucket.sdfIcons;
 
         const float angleOffset =
-            layout.icon.rotation_alignment == RotationAlignmentType::Map
+            layout.icon.rotationAlignment == RotationAlignmentType::Map
                 ? state.getAngle()
                 : 0;
 
@@ -191,7 +190,7 @@ void Painter::renderSymbol(SymbolBucket& bucket, const SymbolLayer& layer, const
         } else {
             mat4 vtxMatrix = translatedMatrix(matrix, properties.icon.translate, id, properties.icon.translate_anchor);
 
-            bool skewed = layout.icon.rotation_alignment == RotationAlignmentType::Map;
+            bool skewed = layout.icon.rotationAlignment == RotationAlignmentType::Map;
             mat4 exMatrix;
             float s;
 
@@ -235,7 +234,7 @@ void Painter::renderSymbol(SymbolBucket& bucket, const SymbolLayer& layer, const
     }
 
     if (bucket.hasTextData()) {
-        config.depthTest = layout.text.rotation_alignment == RotationAlignmentType::Map;
+        config.depthTest = layout.text.rotationAlignment == RotationAlignmentType::Map;
 
         glyphAtlas->bind();
 

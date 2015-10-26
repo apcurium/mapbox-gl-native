@@ -7,6 +7,85 @@
 
 namespace mbgl {
 
+void SymbolLayoutProperties::parse(const JSVal& value) {
+    placement.parse("symbol-placement", value);
+    spacing.parse("symbol-spacing", value);
+    avoidEdges.parse("symbol-avoid-edges", value);
+
+    icon.allowOverlap.parse("icon-allow-overlap", value);
+    icon.ignorePlacement.parse("icon-ignore-placement", value);
+    icon.optional.parse("icon-optional", value);
+    icon.rotationAlignment.parse("icon-rotation-alignment", value);
+    icon.size.parse("icon-size", value);
+    icon.image.parse("icon-image", value);
+    icon.rotate.parse("icon-rotate", value);
+    icon.padding.parse("icon-padding", value);
+    icon.keepUpright.parse("icon-keep-upright", value);
+    icon.offset.parse("icon-offset", value);
+
+    text.rotationAlignment.parse("text-rotation-alignment", value);
+    text.field.parse("text-field", value);
+    text.font.parse("text-font", value);
+    text.size.parse("text-size", value);
+    text.maxWidth.parse("text-max-width", value);
+    text.lineHeight.parse("text-line-height", value);
+    text.letterSpacing.parse("text-letter-spacing", value);
+    text.justify.parse("text-justify", value);
+    text.anchor.parse("text-anchor", value);
+    text.maxAngle.parse("text-max-angle", value);
+    text.rotate.parse("text-rotate", value);
+    text.padding.parse("text-padding", value);
+    text.keepUpright.parse("text-keep-upright", value);
+    text.transform.parse("text-transform", value);
+    text.offset.parse("text-offset", value);
+    text.allowOverlap.parse("text-allow-overlap", value);
+    text.ignorePlacement.parse("text-ignore-placement", value);
+    text.optional.parse("text-optional", value);
+}
+
+void SymbolLayoutProperties::calculate(SymbolLayoutProperties& out, float z) const {
+    out.placement.value = placement.calculate(z);
+    if (out.placement.value == PlacementType::Line) {
+        out.icon.rotationAlignment = RotationAlignmentType::Map;
+        out.text.rotationAlignment = RotationAlignmentType::Map;
+    };
+    out.spacing = spacing.calculate(z);
+    out.avoidEdges = avoidEdges.calculate(z);
+
+    out.icon.allowOverlap = icon.allowOverlap.calculate(z);
+    out.icon.ignorePlacement = icon.ignorePlacement.calculate(z);
+    out.icon.optional = icon.optional.calculate(z);
+    out.icon.rotationAlignment = icon.rotationAlignment.calculate(z);
+    out.icon.image = icon.image.calculate(z);
+    out.icon.padding = icon.padding.calculate(z);
+    out.icon.rotate = icon.rotate.calculate(z);
+    out.icon.keepUpright = icon.keepUpright.calculate(z);
+    out.icon.offset = icon.offset.calculate(z);
+
+    out.text.rotationAlignment = text.rotationAlignment.calculate(z);
+    out.text.field = text.field.calculate(z);
+    out.text.font = text.font.calculate(z);
+    out.text.maxWidth = text.maxWidth.calculate(z);
+    out.text.lineHeight = text.lineHeight.calculate(z);
+    out.text.letterSpacing = text.letterSpacing.calculate(z);
+    out.text.maxAngle = text.maxAngle.calculate(z);
+    out.text.rotate = text.rotate.calculate(z);
+    out.text.padding = text.padding.calculate(z);
+    out.text.ignorePlacement = text.ignorePlacement.calculate(z);
+    out.text.optional = text.optional.calculate(z);
+    out.text.justify = text.justify.calculate(z);
+    out.text.anchor = text.anchor.calculate(z);
+    out.text.keepUpright = text.keepUpright.calculate(z);
+    out.text.transform = text.transform.calculate(z);
+    out.text.offset = text.offset.calculate(z);
+    out.text.allowOverlap = text.allowOverlap.calculate(z);
+
+    out.icon.size = out.icon.size.calculate(z + 1);
+    out.text.size = out.text.size.calculate(z + 1);
+    out.iconMaxSize = out.icon.size.calculate(18);
+    out.textMaxSize = out.text.size.calculate(18);
+}
+
 std::unique_ptr<StyleLayer> SymbolLayer::clone() const {
     std::unique_ptr<SymbolLayer> result = std::make_unique<SymbolLayer>();
     result->copy(*this);
@@ -16,45 +95,13 @@ std::unique_ptr<StyleLayer> SymbolLayer::clone() const {
 }
 
 void SymbolLayer::parseLayout(const JSVal& value) {
-    parseProperty<Function<PlacementType>>("symbol-placement", PropertyKey::SymbolPlacement, layout, value);
-    parseProperty<Function<float>>("symbol-spacing", PropertyKey::SymbolSpacing, layout, value);
-    parseProperty<Function<bool>>("symbol-avoid-edges", PropertyKey::SymbolAvoidEdges, layout, value);
-    parseProperty<Function<bool>>("icon-allow-overlap", PropertyKey::IconAllowOverlap, layout, value);
-    parseProperty<Function<bool>>("icon-ignore-placement", PropertyKey::IconIgnorePlacement, layout, value);
-    parseProperty<Function<bool>>("icon-optional", PropertyKey::IconOptional, layout, value);
-    parseProperty<Function<RotationAlignmentType>>("icon-rotation-alignment", PropertyKey::IconRotationAlignment, layout, value);
-    parseProperty<Function<float>>("icon-size", PropertyKey::IconSize, layout, value);
-    parseProperty<Function<std::string>>("icon-image", PropertyKey::IconImage, layout, value);
-    parseProperty<Function<float>>("icon-rotate", PropertyKey::IconRotate, layout, value);
-    parseProperty<Function<float>>("icon-padding", PropertyKey::IconPadding, layout, value);
-    parseProperty<Function<bool>>("icon-keep-upright", PropertyKey::IconKeepUpright, layout, value);
-    parseProperty<Function<std::array<float, 2>>>("icon-offset", PropertyKey::IconOffset, layout, value);
-    parseProperty<Function<RotationAlignmentType>>("text-rotation-alignment", PropertyKey::TextRotationAlignment, layout, value);
-    parseProperty<Function<std::string>>("text-field", PropertyKey::TextField, layout, value);
-    parseProperty<Function<std::string>>("text-font", PropertyKey::TextFont, layout, value);
-    parseProperty<Function<float>>("text-size", PropertyKey::TextSize, layout, value);
-    parseProperty<Function<float>>("text-max-width", PropertyKey::TextMaxWidth, layout, value);
-    parseProperty<Function<float>>("text-line-height", PropertyKey::TextLineHeight, layout, value);
-    parseProperty<Function<float>>("text-letter-spacing", PropertyKey::TextLetterSpacing, layout, value);
-    parseProperty<Function<TextJustifyType>>("text-justify", PropertyKey::TextJustify, layout, value);
-    parseProperty<Function<TextAnchorType>>("text-anchor", PropertyKey::TextAnchor, layout, value);
-    parseProperty<Function<float>>("text-max-angle", PropertyKey::TextMaxAngle, layout, value);
-    parseProperty<Function<float>>("text-rotate", PropertyKey::TextRotate, layout, value);
-    parseProperty<Function<float>>("text-padding", PropertyKey::TextPadding, layout, value);
-    parseProperty<Function<bool>>("text-keep-upright", PropertyKey::TextKeepUpright, layout, value);
-    parseProperty<Function<TextTransformType>>("text-transform", PropertyKey::TextTransform, layout, value);
-    parseProperty<Function<std::array<float, 2>>>("text-offset", PropertyKey::TextOffset, layout, value);
-    parseProperty<Function<bool>>("text-allow-overlap", PropertyKey::TextAllowOverlap, layout, value);
-    parseProperty<Function<bool>>("text-ignore-placement", PropertyKey::TextIgnorePlacement, layout, value);
-    parseProperty<Function<bool>>("text-optional", PropertyKey::TextOptional, layout, value);
+    layout.parse(value);
 }
 
 void SymbolLayer::parsePaints(const JSVal& layer) {
     paints.parseEach(layer, [&] (ClassProperties& paint, const JSVal& value) {
         parseProperty<Function<float>>("icon-opacity", PropertyKey::IconOpacity, paint, value);
         parseProperty<PropertyTransition>("icon-opacity-transition", PropertyKey::IconOpacity, paint, value);
-        parseProperty<Function<float>>("icon-size", PropertyKey::IconSize, paint, value);
-        parseProperty<PropertyTransition>("icon-size-transition", PropertyKey::IconSize, paint, value);
         parseProperty<Function<Color>>("icon-color", PropertyKey::IconColor, paint, value);
         parseProperty<PropertyTransition>("icon-color-transition", PropertyKey::IconColor, paint, value);
         parseProperty<Function<Color>>("icon-halo-color", PropertyKey::IconHaloColor, paint, value);
@@ -69,8 +116,6 @@ void SymbolLayer::parsePaints(const JSVal& layer) {
 
         parseProperty<Function<float>>("text-opacity", PropertyKey::TextOpacity, paint, value);
         parseProperty<PropertyTransition>("text-opacity-transition", PropertyKey::TextOpacity, paint, value);
-        parseProperty<Function<float>>("text-size", PropertyKey::TextSize, paint, value);
-        parseProperty<PropertyTransition>("text-size-transition", PropertyKey::TextSize, paint, value);
         parseProperty<Function<Color>>("text-color", PropertyKey::TextColor, paint, value);
         parseProperty<PropertyTransition>("text-color-transition", PropertyKey::TextColor, paint, value);
         parseProperty<Function<Color>>("text-halo-color", PropertyKey::TextHaloColor, paint, value);
@@ -113,64 +158,17 @@ void SymbolLayer::recalculate(const StyleCalculationParameters& parameters) {
     paints.calculate(PropertyKey::TextTranslateAnchor, properties.text.translate_anchor, parameters);
 
     // text-size and icon-size are layout properties but they also need to be evaluated as paint properties:
-    auto it = layout.properties.find(PropertyKey::IconSize);
-    if (it != layout.properties.end()) {
-        const PropertyEvaluator<float> evaluator(parameters);
-        properties.icon.size = mapbox::util::apply_visitor(evaluator, it->second);
-    }
-    it = layout.properties.find(PropertyKey::TextSize);
-    if (it != layout.properties.end()) {
-        const PropertyEvaluator<float> evaluator(parameters);
-        properties.text.size = mapbox::util::apply_visitor(evaluator, it->second);
-    }
+    properties.icon.size = layout.icon.size.calculate(parameters.z);
+    properties.text.size = layout.text.size.calculate(parameters.z);
 
     passes = properties.isVisible() ? RenderPass::Translucent : RenderPass::None;
 }
 
 std::unique_ptr<Bucket> SymbolLayer::createBucket(StyleBucketParameters& parameters) const {
-    const float z = parameters.tileID.z;
-    auto bucket = std::make_unique<SymbolBucket>(parameters.tileID.overscaling, z);
+    auto bucket = std::make_unique<SymbolBucket>(parameters.tileID.overscaling,
+                                                 parameters.tileID.z);
 
-    layout.calculate(PropertyKey::SymbolPlacement, bucket->layout.placement, z);
-    if (bucket->layout.placement == PlacementType::Line) {
-        bucket->layout.icon.rotation_alignment = RotationAlignmentType::Map;
-        bucket->layout.text.rotation_alignment = RotationAlignmentType::Map;
-    };
-    layout.calculate(PropertyKey::SymbolSpacing, bucket->layout.spacing, z);
-    layout.calculate(PropertyKey::SymbolAvoidEdges, bucket->layout.avoid_edges, z);
-
-    layout.calculate(PropertyKey::IconAllowOverlap, bucket->layout.icon.allow_overlap, z);
-    layout.calculate(PropertyKey::IconIgnorePlacement, bucket->layout.icon.ignore_placement, z);
-    layout.calculate(PropertyKey::IconOptional, bucket->layout.icon.optional, z);
-    layout.calculate(PropertyKey::IconRotationAlignment, bucket->layout.icon.rotation_alignment, z);
-    layout.calculate(PropertyKey::IconImage, bucket->layout.icon.image, z);
-    layout.calculate(PropertyKey::IconPadding, bucket->layout.icon.padding, z);
-    layout.calculate(PropertyKey::IconRotate, bucket->layout.icon.rotate, z);
-    layout.calculate(PropertyKey::IconKeepUpright, bucket->layout.icon.keep_upright, z);
-    layout.calculate(PropertyKey::IconOffset, bucket->layout.icon.offset, z);
-
-    layout.calculate(PropertyKey::TextRotationAlignment, bucket->layout.text.rotation_alignment, z);
-    layout.calculate(PropertyKey::TextField, bucket->layout.text.field, z);
-    layout.calculate(PropertyKey::TextFont, bucket->layout.text.font, z);
-    layout.calculate(PropertyKey::TextMaxWidth, bucket->layout.text.max_width, z);
-    layout.calculate(PropertyKey::TextLineHeight, bucket->layout.text.line_height, z);
-    layout.calculate(PropertyKey::TextLetterSpacing, bucket->layout.text.letter_spacing, z);
-    layout.calculate(PropertyKey::TextMaxAngle, bucket->layout.text.max_angle, z);
-    layout.calculate(PropertyKey::TextRotate, bucket->layout.text.rotate, z);
-    layout.calculate(PropertyKey::TextPadding, bucket->layout.text.padding, z);
-    layout.calculate(PropertyKey::TextIgnorePlacement, bucket->layout.text.ignore_placement, z);
-    layout.calculate(PropertyKey::TextOptional, bucket->layout.text.optional, z);
-    layout.calculate(PropertyKey::TextJustify, bucket->layout.text.justify, z);
-    layout.calculate(PropertyKey::TextAnchor, bucket->layout.text.anchor, z);
-    layout.calculate(PropertyKey::TextKeepUpright, bucket->layout.text.keep_upright, z);
-    layout.calculate(PropertyKey::TextTransform, bucket->layout.text.transform, z);
-    layout.calculate(PropertyKey::TextOffset, bucket->layout.text.offset, z);
-    layout.calculate(PropertyKey::TextAllowOverlap, bucket->layout.text.allow_overlap, z);
-
-    layout.calculate(PropertyKey::IconSize, bucket->layout.icon.size, z + 1);
-    layout.calculate(PropertyKey::IconSize, bucket->layout.icon.max_size, 18);
-    layout.calculate(PropertyKey::TextSize, bucket->layout.text.size, z + 1);
-    layout.calculate(PropertyKey::TextSize, bucket->layout.text.max_size, 18);
+    layout.calculate(bucket->layout, parameters.tileID.z);
 
     bucket->parseFeatures(parameters.layer, filter);
 
