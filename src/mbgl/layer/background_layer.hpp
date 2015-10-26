@@ -2,10 +2,20 @@
 #define MBGL_BACKGROUND_LAYER
 
 #include <mbgl/style/style_layer.hpp>
-#include <mbgl/style/style_properties.hpp>
-#include <mbgl/style/paint_properties_map.hpp>
+#include <mbgl/style/paint_property.hpp>
 
 namespace mbgl {
+
+class BackgroundPaintProperties {
+public:
+    PaintProperty<float> opacity = 1.0f;
+    PaintProperty<Color> color = { {{ 0, 0, 0, 1 }} };
+    PiecewiseConstantPaintProperty<std::string> pattern = { "" };
+
+    void parse(const JSVal&);
+    void cascade(const StyleCascadeParameters&);
+    RenderPass recalculate(const StyleCalculationParameters&);
+};
 
 class BackgroundLayer : public StyleLayer {
 public:
@@ -21,9 +31,7 @@ public:
 
     bool hasTransitions() const override;
 
-    PaintPropertiesMap paints;
-
-    BackgroundPaintProperties properties;
+    BackgroundPaintProperties paint;
 };
 
 }

@@ -1,17 +1,12 @@
 #ifndef MBGL_STYLE_CLASS_DICTIONARY
 #define MBGL_STYLE_CLASS_DICTIONARY
 
-#include <cstdint>
+#include <mbgl/style/types.hpp>
+
 #include <string>
 #include <unordered_map>
 
 namespace mbgl {
-
-enum class ClassID : uint32_t {
-    Fallback = 0, // These values are from the fallback properties
-    Default = 1, // These values are from the default style for a layer
-    Named = 2 // These values (and all subsequent IDs) are from a named style from the layer
-};
 
 class ClassDictionary {
 private:

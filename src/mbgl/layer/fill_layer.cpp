@@ -5,59 +5,75 @@
 
 namespace mbgl {
 
-std::unique_ptr<StyleLayer> FillLayer::clone() const {
-    std::unique_ptr<FillLayer> result = std::make_unique<FillLayer>();
-    result->copy(*this);
-    result->paints.paints = paints.paints;
-    return std::move(result);
-}
-
-void FillLayer::parsePaints(const JSVal& layer) {
-    paints.parseEach(layer, [&] (ClassProperties& paint, const JSVal& value) {
-        parseProperty<Function<bool>>("fill-antialias", PropertyKey::FillAntialias, paint, value);
-        parseProperty<Function<float>>("fill-opacity", PropertyKey::FillOpacity, paint, value);
-        parseProperty<PropertyTransition>("fill-opacity-transition", PropertyKey::FillOpacity, paint, value);
-        parseProperty<Function<Color>>("fill-color", PropertyKey::FillColor, paint, value);
-        parseProperty<PropertyTransition>("fill-color-transition", PropertyKey::FillColor, paint, value);
-        parseProperty<Function<Color>>("fill-outline-color", PropertyKey::FillOutlineColor, paint, value);
-        parseProperty<PropertyTransition>("fill-outline-color-transition", PropertyKey::FillOutlineColor, paint, value);
-        parseProperty<Function<std::array<float, 2>>>("fill-translate", PropertyKey::FillTranslate, paint, value);
-        parseProperty<PropertyTransition>("fill-translate-transition", PropertyKey::FillTranslate, paint, value);
-        parseProperty<Function<TranslateAnchorType>>("fill-translate-anchor", PropertyKey::FillTranslateAnchor, paint, value);
-        parseProperty<PiecewiseConstantFunction<Faded<std::string>>>("fill-pattern", PropertyKey::FillImage, paint, value, "fill-pattern-transition");
+void FillPaintProperties::parse(const JSVal& layer) {
+    eachPaint(layer, [&] (const JSVal& value, ClassID classID) {
+        antialias.parse("fill-antialias", value, classID);
+        opacity.parse("fill-opacity", value, classID);
+        color.parse("fill-color", value, classID);
+        outlineColor.parse("fill-outline-color", value, classID);
+        translate.parse("fill-translate", value, classID);
+        translateAnchor.parse("fill-translate-anchor", value, classID);
+        pattern.parse("fill-pattern", value, classID);
     });
 }
 
-void FillLayer::cascade(const StyleCascadeParameters& parameters) {
-    paints.cascade(parameters);
+void FillPaintProperties::cascade(const StyleCascadeParameters& parameters) {
+    antialias.cascade(parameters);
+    opacity.cascade(parameters);
+    color.cascade(parameters);
+    outlineColor.cascade(parameters);
+    translate.cascade(parameters);
+    translateAnchor.cascade(parameters);
+    pattern.cascade(parameters);
 }
 
-bool FillLayer::hasTransitions() const {
-    return paints.hasTransitions();
-}
+RenderPass FillPaintProperties::recalculate(const StyleCalculationParameters& parameters) {
+//    paints.removeExpiredTransitions(parameters.now);
 
-void FillLayer::recalculate(const StyleCalculationParameters& parameters) {
-    paints.removeExpiredTransitions(parameters.now);
+    antialias.calculate(parameters);
+    opacity.calculate(parameters);
+    color.calculate(parameters);
+    outlineColor.calculate(parameters);
+    translate.calculate(parameters);
+    translateAnchor.calculate(parameters);
+    pattern.calculate(parameters);
 
-    paints.calculate(PropertyKey::FillAntialias, properties.antialias, parameters);
-    paints.calculateTransitioned(PropertyKey::FillOpacity, properties.opacity, parameters);
-    paints.calculateTransitioned(PropertyKey::FillColor, properties.fill_color, parameters);
-    paints.calculateTransitioned(PropertyKey::FillOutlineColor, properties.stroke_color, parameters);
-    paints.calculateTransitioned(PropertyKey::FillTranslate, properties.translate, parameters);
-    paints.calculate(PropertyKey::FillTranslateAnchor, properties.translateAnchor, parameters);
-    paints.calculate(PropertyKey::FillImage, properties.image, parameters);
+    RenderPass passes = RenderPass::None;
 
-    passes = RenderPass::None;
-
-    if (properties.antialias) {
+    if (antialias) {
         passes |= RenderPass::Translucent;
     }
 
-    if (!properties.image.from.empty() || (properties.fill_color[3] * properties.opacity) < 1.0f) {
+    if (!pattern.from.empty() || (color.value[3] * opacity) < 1.0f) {
         passes |= RenderPass::Translucent;
     } else {
         passes |= RenderPass::Opaque;
     }
+
+    return passes;
+}
+
+std::unique_ptr<StyleLayer> FillLayer::clone() const {
+    std::unique_ptr<FillLayer> result = std::make_unique<FillLayer>();
+    result->copy(*this);
+    result->paint = paint;
+    return std::move(result);
+}
+
+void FillLayer::parsePaints(const JSVal& layer) {
+    paint.parse(layer);
+}
+
+void FillLayer::cascade(const StyleCascadeParameters& parameters) {
+    paint.cascade(parameters);
+}
+
+bool FillLayer::hasTransitions() const {
+    return paint.hasTransitions();
+}
+
+void FillLayer::recalculate(const StyleCalculationParameters& parameters) {
+    passes = paint.recalculate(parameters);
 }
 
 std::unique_ptr<Bucket> FillLayer::createBucket(StyleBucketParameters& parameters) const {

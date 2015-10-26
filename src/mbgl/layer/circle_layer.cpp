@@ -5,43 +5,60 @@
 
 namespace mbgl {
 
+void CirclePaintProperties::parse(const JSVal& layer) {
+    eachPaint(layer, [&] (const JSVal& value, ClassID classID) {
+        radius.parse("circle-radius", value, classID);
+        color.parse("circle-color", value, classID);
+        opacity.parse("circle-opacity", value, classID);
+        translate.parse("circle-translate", value, classID);
+        translateAnchor.parse("circle-translate-anchor", value, classID);
+        blur.parse("circle-blur", value, classID);
+    });
+}
+
+void CirclePaintProperties::cascade(const StyleCascadeParameters& parameters) {
+    radius.cascade(parameters);
+    color.cascade(parameters);
+    opacity.cascade(parameters);
+    translate.cascade(parameters);
+    translateAnchor.cascade(parameters);
+    blur.cascade(parameters);
+}
+
+RenderPass CirclePaintProperties::recalculate(const StyleCalculationParameters& parameters) {
+//    paints.removeExpiredTransitions(parameters.now);
+
+    radius.calculate(parameters);
+    color.calculate(parameters);
+    opacity.calculate(parameters);
+    translate.calculate(parameters);
+    translateAnchor.calculate(parameters);
+    blur.calculate(parameters);
+
+    return (radius > 0 && color.value[3] > 0 && opacity > 0) ? RenderPass::Translucent : RenderPass::None;
+}
+
 std::unique_ptr<StyleLayer> CircleLayer::clone() const {
     std::unique_ptr<CircleLayer> result = std::make_unique<CircleLayer>();
     result->copy(*this);
-    result->paints.paints = paints.paints;
+    result->paint = paint;
     return std::move(result);
 }
 
 void CircleLayer::parsePaints(const JSVal& layer) {
-    paints.parseEach(layer, [&] (ClassProperties& paint, const JSVal& value) {
-        parseProperty<Function<float>>("circle-radius", PropertyKey::CircleRadius, paint, value);
-        parseProperty<Function<Color>>("circle-color", PropertyKey::CircleColor, paint, value);
-        parseProperty<Function<float>>("circle-opacity", PropertyKey::CircleOpacity, paint, value);
-        parseProperty<Function<std::array<float,2>>>("circle-translate", PropertyKey::CircleTranslate, paint, value);
-        parseProperty<Function<TranslateAnchorType>>("circle-translate-anchor", PropertyKey::CircleTranslateAnchor, paint, value);
-        parseProperty<Function<float>>("circle-blur", PropertyKey::CircleBlur, paint, value);
-    });
+    paint.parse(layer);
 }
 
 void CircleLayer::cascade(const StyleCascadeParameters& parameters) {
-    paints.cascade(parameters);
+    paint.cascade(parameters);
 }
 
 bool CircleLayer::hasTransitions() const {
-    return paints.hasTransitions();
+    return paint.hasTransitions();
 }
 
 void CircleLayer::recalculate(const StyleCalculationParameters& parameters) {
-    paints.removeExpiredTransitions(parameters.now);
-
-    paints.calculateTransitioned(PropertyKey::CircleRadius, properties.radius, parameters);
-    paints.calculateTransitioned(PropertyKey::CircleColor, properties.color, parameters);
-    paints.calculateTransitioned(PropertyKey::CircleOpacity, properties.opacity, parameters);
-    paints.calculateTransitioned(PropertyKey::CircleTranslate, properties.translate, parameters);
-    paints.calculate(PropertyKey::CircleTranslateAnchor, properties.translateAnchor, parameters);
-    paints.calculateTransitioned(PropertyKey::CircleBlur, properties.blur, parameters);
-
-    passes = properties.isVisible() ? RenderPass::Translucent : RenderPass::None;
+    passes = paint.recalculate(parameters);
 }
 
 std::unique_ptr<Bucket> CircleLayer::createBucket(StyleBucketParameters& parameters) const {

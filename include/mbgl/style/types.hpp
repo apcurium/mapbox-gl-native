@@ -8,18 +8,14 @@
 
 namespace mbgl {
 
+enum class ClassID : uint32_t {
+    Fallback = 0, // These values are from the fallback properties
+    Default = 1, // These values are from the default style for a layer
+    Named = 2 // These values (and all subsequent IDs) are from a named style from the layer
+};
+
 // Stores a premultiplied color, with all four channels ranging from 0..1
 typedef std::array<float, 4> Color;
-
-
-template <typename T>
-struct Faded {
-    T from;
-    float fromScale;
-    T to;
-    float toScale;
-    float t;
-};
 
 // -------------------------------------------------------------------------------------------------
 

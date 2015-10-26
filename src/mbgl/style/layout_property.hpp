@@ -2,6 +2,7 @@
 #define MBGL_LAYOUT_PROPERTY
 
 #include <mbgl/style/property_parsing.hpp>
+#include <mbgl/style/property_evaluator.hpp>
 #include <mbgl/style/function_properties.hpp>
 
 #include <rapidjson/document.h>
@@ -17,7 +18,7 @@ public:
 
     void parse(const char * name, const JSVal& layout) {
         if (layout.HasMember(name)) {
-            parsedValue = detail::parseProperty<Function<T>>(name, layout[name]);
+            parsedValue = parseProperty<Function<T>>(name, layout[name]);
         }
     }
 

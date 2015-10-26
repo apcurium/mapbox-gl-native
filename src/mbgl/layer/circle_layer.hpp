@@ -2,10 +2,23 @@
 #define MBGL_CIRCLE_LAYER
 
 #include <mbgl/style/style_layer.hpp>
-#include <mbgl/style/style_properties.hpp>
-#include <mbgl/style/paint_properties_map.hpp>
+#include <mbgl/style/paint_property.hpp>
 
 namespace mbgl {
+
+class CirclePaintProperties {
+public:
+    PaintProperty<float> radius = 5.0f;
+    PaintProperty<Color> color = { {{ 0, 0, 0, 1 }} };
+    PaintProperty<float> opacity = 1.0f;
+    PaintProperty<std::array<float, 2>> translate = { {{ 0, 0 }} };
+    PaintProperty<TranslateAnchorType> translateAnchor = TranslateAnchorType::Map;
+    PaintProperty<float> blur = 0;
+
+    void parse(const JSVal&);
+    void cascade(const StyleCascadeParameters&);
+    RenderPass recalculate(const StyleCalculationParameters&);
+};
 
 class CircleLayer : public StyleLayer {
 public:
@@ -21,9 +34,7 @@ public:
 
     bool hasTransitions() const override;
 
-    PaintPropertiesMap paints;
-
-    CirclePaintProperties properties;
+    CirclePaintProperties paint;
 };
 
 }

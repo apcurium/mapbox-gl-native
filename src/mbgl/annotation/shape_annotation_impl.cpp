@@ -32,12 +32,10 @@ void ShapeAnnotationImpl::updateStyle(Style& style) {
         layer->type = StyleLayerType::Line;
         layer->layout.join = JoinType::Round;
 
-        const LinePaintProperties& properties = shape.properties.get<LinePaintProperties>();
-        ClassProperties paintProperties;
-        paintProperties.set(PropertyKey::LineOpacity, ConstantFunction<float>(properties.opacity));
-        paintProperties.set(PropertyKey::LineWidth, ConstantFunction<float>(properties.width));
-        paintProperties.set(PropertyKey::LineColor, ConstantFunction<Color>(properties.color));
-        layer->paints.paints.emplace(ClassID::Default, std::move(paintProperties));
+        const LineAnnotationProperties& properties = shape.properties.get<LineAnnotationProperties>();
+        layer->paint.opacity = properties.opacity;
+        layer->paint.width = properties.width;
+        layer->paint.color = properties.color;
 
         layer->id = layerID;
         layer->source = AnnotationManager::SourceID;
@@ -51,12 +49,10 @@ void ShapeAnnotationImpl::updateStyle(Style& style) {
         std::unique_ptr<FillLayer> layer = std::make_unique<FillLayer>();
         layer->type = StyleLayerType::Fill;
 
-        const FillPaintProperties& properties = shape.properties.get<FillPaintProperties>();
-        ClassProperties paintProperties;
-        paintProperties.set(PropertyKey::FillOpacity, ConstantFunction<float>(properties.opacity));
-        paintProperties.set(PropertyKey::FillColor, ConstantFunction<Color>(properties.fill_color));
-        paintProperties.set(PropertyKey::FillOutlineColor, ConstantFunction<Color>(properties.stroke_color));
-        layer->paints.paints.emplace(ClassID::Default, std::move(paintProperties));
+        const FillAnnotationProperties& properties = shape.properties.get<FillAnnotationProperties>();
+        layer->paint.opacity = properties.opacity;
+        layer->paint.color = properties.color;
+        layer->paint.outlineColor = properties.outlineColor;
 
         layer->id = layerID;
         layer->source = AnnotationManager::SourceID;

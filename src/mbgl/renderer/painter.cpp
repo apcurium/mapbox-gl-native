@@ -296,8 +296,8 @@ std::vector<RenderItem> Painter::determineRenderOrder(const Style& style) {
         if (layer.visibility == VisibilityType::None) continue;
         if (layer.type == StyleLayerType::Background) {
             // This layer defines a background color/image.
-            auto& props = dynamic_cast<const BackgroundLayer&>(layer).properties;
-            if (props.image.from.empty()) {
+            auto& props = dynamic_cast<const BackgroundLayer&>(layer).paint;
+            if (props.pattern.from.empty()) {
                 // This is a solid background. We can use glClear().
                 background = props.color;
                 background[0] *= props.opacity;
@@ -366,14 +366,14 @@ std::vector<RenderItem> Painter::determineRenderOrder(const Style& style) {
 void Painter::renderBackground(const BackgroundLayer& layer) {
     // Note: This function is only called for textured background. Otherwise, the background color
     // is created with glClear.
-    const BackgroundPaintProperties& properties = layer.properties;
+    const BackgroundPaintProperties& properties = layer.paint;
 
-    if (!properties.image.to.empty()) {
+    if (!properties.pattern.to.empty()) {
         if ((properties.opacity >= 1.0f) != (pass == RenderPass::Opaque))
             return;
 
-        SpriteAtlasPosition imagePosA = spriteAtlas->getPosition(properties.image.from, true);
-        SpriteAtlasPosition imagePosB = spriteAtlas->getPosition(properties.image.to, true);
+        SpriteAtlasPosition imagePosA = spriteAtlas->getPosition(properties.pattern.from, true);
+        SpriteAtlasPosition imagePosB = spriteAtlas->getPosition(properties.pattern.to, true);
         float zoomFraction = state.getZoomFraction();
 
         useProgram(patternShader->program);
@@ -382,7 +382,7 @@ void Painter::renderBackground(const BackgroundLayer& layer) {
         patternShader->u_pattern_br_a = imagePosA.br;
         patternShader->u_pattern_tl_b = imagePosB.tl;
         patternShader->u_pattern_br_b = imagePosB.br;
-        patternShader->u_mix = properties.image.t;
+        patternShader->u_mix = properties.pattern.t;
         patternShader->u_opacity = properties.opacity;
 
         LatLng latLng = state.getLatLng();
@@ -393,11 +393,11 @@ void Painter::renderBackground(const BackgroundLayer& layer) {
         mat3 matrixA;
         matrix::identity(matrixA);
         matrix::scale(matrixA, matrixA,
-                      1.0f / (sizeA[0] * properties.image.fromScale),
-                      1.0f / (sizeA[1] * properties.image.fromScale));
+                      1.0f / (sizeA[0] * properties.pattern.fromScale),
+                      1.0f / (sizeA[1] * properties.pattern.fromScale));
         matrix::translate(matrixA, matrixA,
-                          std::fmod(center.x * 512, sizeA[0] * properties.image.fromScale),
-                          std::fmod(center.y * 512, sizeA[1] * properties.image.fromScale));
+                          std::fmod(center.x * 512, sizeA[0] * properties.pattern.fromScale),
+                          std::fmod(center.y * 512, sizeA[1] * properties.pattern.fromScale));
         matrix::rotate(matrixA, matrixA, -state.getAngle());
         matrix::scale(matrixA, matrixA,
                        scale * state.getWidth()  / 2,
@@ -407,11 +407,11 @@ void Painter::renderBackground(const BackgroundLayer& layer) {
         mat3 matrixB;
         matrix::identity(matrixB);
         matrix::scale(matrixB, matrixB,
-                      1.0f / (sizeB[0] * properties.image.toScale),
-                      1.0f / (sizeB[1] * properties.image.toScale));
+                      1.0f / (sizeB[0] * properties.pattern.toScale),
+                      1.0f / (sizeB[1] * properties.pattern.toScale));
         matrix::translate(matrixB, matrixB,
-                          std::fmod(center.x * 512, sizeB[0] * properties.image.toScale),
-                          std::fmod(center.y * 512, sizeB[1] * properties.image.toScale));
+                          std::fmod(center.x * 512, sizeB[0] * properties.pattern.toScale),
+                          std::fmod(center.y * 512, sizeB[1] * properties.pattern.toScale));
         matrix::rotate(matrixB, matrixB, -state.getAngle());
         matrix::scale(matrixB, matrixB,
                        scale * state.getWidth()  / 2,

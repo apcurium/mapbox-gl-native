@@ -2,9 +2,8 @@
 #define MBGL_LINE_LAYER
 
 #include <mbgl/style/style_layer.hpp>
-#include <mbgl/style/style_properties.hpp>
-#include <mbgl/style/paint_properties_map.hpp>
 #include <mbgl/style/layout_property.hpp>
+#include <mbgl/style/paint_property.hpp>
 
 namespace mbgl {
 
@@ -17,6 +16,26 @@ public:
 
     void parse(const JSVal&);
     void calculate(LineLayoutProperties&, float z) const;
+};
+
+class LinePaintProperties {
+public:
+    PaintProperty<float> opacity = 1.0f;
+    PaintProperty<Color> color = { {{ 0, 0, 0, 1 }} };
+    PaintProperty<std::array<float, 2>> translate = { {{ 0, 0 }} };
+    PaintProperty<TranslateAnchorType> translateAnchor = TranslateAnchorType::Map;
+    PaintProperty<float> width = 1;
+    PaintProperty<float> gapWidth = 0;
+    PaintProperty<float> blur = 0;
+    PiecewiseConstantPaintProperty<std::vector<float>> dasharray = {};
+    PiecewiseConstantPaintProperty<std::string> pattern = { "" };
+
+    // Special case
+    float dashLineWidth = 1;
+
+    void parse(const JSVal&);
+    void cascade(const StyleCascadeParameters&);
+    RenderPass recalculate(const StyleCalculationParameters&);
 };
 
 class LineLayer : public StyleLayer {
@@ -34,9 +53,7 @@ public:
     bool hasTransitions() const override;
 
     LineLayoutProperties layout;
-    PaintPropertiesMap paints;
-
-    LinePaintProperties properties;
+    LinePaintProperties paint;
 };
 
 }

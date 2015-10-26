@@ -2,9 +2,8 @@
 #define MBGL_SYMBOL_LAYER
 
 #include <mbgl/style/style_layer.hpp>
-#include <mbgl/style/style_properties.hpp>
-#include <mbgl/style/paint_properties_map.hpp>
 #include <mbgl/style/layout_property.hpp>
+#include <mbgl/style/paint_property.hpp>
 
 namespace mbgl {
 
@@ -58,6 +57,36 @@ public:
     void calculate(SymbolLayoutProperties&, float z) const;
 };
 
+class SymbolPaintProperties {
+public:
+    class PaintProperties {
+    public:
+        PaintProperties(float size_) : size(size_) {}
+
+        PaintProperty<float> opacity = 1.0f;
+        PaintProperty<Color> color = { {{ 0, 0, 0, 1 }} };
+        PaintProperty<Color> haloColor = { {{ 0, 0, 0, 0 }} };
+        PaintProperty<float> haloWidth = 0.0f;
+        PaintProperty<float> haloBlur = 0.0f;
+        PaintProperty<std::array<float, 2>> translate = { {{ 0, 0 }} };
+        PaintProperty<TranslateAnchorType> translateAnchor = TranslateAnchorType::Map;
+
+        // Special case
+        float size;
+
+        bool isVisible() const {
+            return opacity > 0 && (color.value[3] > 0 || haloColor.value[3] > 0) && size > 0;
+        }
+    };
+
+    PaintProperties icon { 1.0f };
+    PaintProperties text { 16.0f };
+
+    void parse(const JSVal&);
+    void cascade(const StyleCascadeParameters&);
+    RenderPass recalculate(const StyleCalculationParameters&);
+};
+
 class SymbolLayer : public StyleLayer {
 public:
     std::unique_ptr<StyleLayer> clone() const override;
@@ -73,9 +102,7 @@ public:
     bool hasTransitions() const override;
 
     SymbolLayoutProperties layout;
-    PaintPropertiesMap paints;
-
-    SymbolPaintProperties properties;
+    SymbolPaintProperties paint;
 };
 
 }

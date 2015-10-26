@@ -2,10 +2,24 @@
 #define MBGL_RASTER_LAYER
 
 #include <mbgl/style/style_layer.hpp>
-#include <mbgl/style/style_properties.hpp>
-#include <mbgl/style/paint_properties_map.hpp>
+#include <mbgl/style/paint_property.hpp>
 
 namespace mbgl {
+
+class RasterPaintProperties {
+public:
+    PaintProperty<float> opacity = 1.0f;
+    PaintProperty<float> hueRotate = 0.0f;
+    PaintProperty<float> brightnessMin = 0.0f;
+    PaintProperty<float> brightnessMax = 1.0f;
+    PaintProperty<float> saturation = 0.0f;
+    PaintProperty<float> contrast = 0.0f;
+    PaintProperty<float> fadeDuration = 0.0f;
+
+    void parse(const JSVal&);
+    void cascade(const StyleCascadeParameters&);
+    RenderPass recalculate(const StyleCalculationParameters&);
+};
 
 class RasterLayer : public StyleLayer {
 public:
@@ -21,9 +35,7 @@ public:
 
     bool hasTransitions() const override;
 
-    PaintPropertiesMap paints;
-
-    RasterPaintProperties properties;
+    RasterPaintProperties paint;
 };
 
 }

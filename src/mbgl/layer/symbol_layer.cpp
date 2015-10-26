@@ -86,11 +86,69 @@ void SymbolLayoutProperties::calculate(SymbolLayoutProperties& out, float z) con
     out.textMaxSize = out.text.size.calculate(18);
 }
 
+void SymbolPaintProperties::parse(const JSVal& layer) {
+    eachPaint(layer, [&] (const JSVal& value, ClassID classID) {
+        icon.opacity.parse("icon-opacity", value, classID);
+        icon.color.parse("icon-color", value, classID);
+        icon.haloColor.parse("icon-halo-color", value, classID);
+        icon.haloWidth.parse("icon-halo-width", value, classID);
+        icon.haloBlur.parse("icon-halo-blur", value, classID);
+        icon.translate.parse("icon-translate", value, classID);
+        icon.translateAnchor.parse("icon-translate-anchor", value, classID);
+
+        text.opacity.parse("text-opacity", value, classID);
+        text.color.parse("text-color", value, classID);
+        text.haloColor.parse("text-halo-color", value, classID);
+        text.haloWidth.parse("text-halo-width", value, classID);
+        text.haloBlur.parse("text-halo-blur", value, classID);
+        text.translate.parse("text-translate", value, classID);
+        text.translateAnchor.parse("text-translate-anchor", value, classID);
+    });
+}
+
+void SymbolPaintProperties::cascade(const StyleCascadeParameters& parameters) {
+    icon.opacity.cascade(parameters);
+    icon.color.cascade(parameters);
+    icon.haloColor.cascade(parameters);
+    icon.haloWidth.cascade(parameters);
+    icon.haloBlur.cascade(parameters);
+    icon.translate.cascade(parameters);
+    icon.translateAnchor.cascade(parameters);
+    text.opacity.cascade(parameters);
+    text.color.cascade(parameters);
+    text.haloColor.cascade(parameters);
+    text.haloWidth.cascade(parameters);
+    text.haloBlur.cascade(parameters);
+    text.translate.cascade(parameters);
+    text.translateAnchor.cascade(parameters);
+}
+
+RenderPass SymbolPaintProperties::recalculate(const StyleCalculationParameters& parameters) {
+//    paints.removeExpiredTransitions(parameters.now);
+
+    icon.opacity.calculate(parameters);
+    icon.color.calculate(parameters);
+    icon.haloColor.calculate(parameters);
+    icon.haloWidth.calculate(parameters);
+    icon.haloBlur.calculate(parameters);
+    icon.translate.calculate(parameters);
+    icon.translateAnchor.calculate(parameters);
+    text.opacity.calculate(parameters);
+    text.color.calculate(parameters);
+    text.haloColor.calculate(parameters);
+    text.haloWidth.calculate(parameters);
+    text.haloBlur.calculate(parameters);
+    text.translate.calculate(parameters);
+    text.translateAnchor.calculate(parameters);
+
+    return (icon.isVisible() || text.isVisible()) ? RenderPass::Translucent : RenderPass::None;
+}
+
 std::unique_ptr<StyleLayer> SymbolLayer::clone() const {
     std::unique_ptr<SymbolLayer> result = std::make_unique<SymbolLayer>();
     result->copy(*this);
     result->layout = layout;
-    result->paints.paints = paints.paints;
+    result->paint = paint;
     return std::move(result);
 }
 
@@ -99,69 +157,23 @@ void SymbolLayer::parseLayout(const JSVal& value) {
 }
 
 void SymbolLayer::parsePaints(const JSVal& layer) {
-    paints.parseEach(layer, [&] (ClassProperties& paint, const JSVal& value) {
-        parseProperty<Function<float>>("icon-opacity", PropertyKey::IconOpacity, paint, value);
-        parseProperty<PropertyTransition>("icon-opacity-transition", PropertyKey::IconOpacity, paint, value);
-        parseProperty<Function<Color>>("icon-color", PropertyKey::IconColor, paint, value);
-        parseProperty<PropertyTransition>("icon-color-transition", PropertyKey::IconColor, paint, value);
-        parseProperty<Function<Color>>("icon-halo-color", PropertyKey::IconHaloColor, paint, value);
-        parseProperty<PropertyTransition>("icon-halo-color-transition", PropertyKey::IconHaloColor, paint, value);
-        parseProperty<Function<float>>("icon-halo-width", PropertyKey::IconHaloWidth, paint, value);
-        parseProperty<PropertyTransition>("icon-halo-width-transition", PropertyKey::IconHaloWidth, paint, value);
-        parseProperty<Function<float>>("icon-halo-blur", PropertyKey::IconHaloBlur, paint, value);
-        parseProperty<PropertyTransition>("icon-halo-blur-transition", PropertyKey::IconHaloBlur, paint, value);
-        parseProperty<Function<std::array<float, 2>>>("icon-translate", PropertyKey::IconTranslate, paint, value);
-        parseProperty<PropertyTransition>("icon-translate-transition", PropertyKey::IconTranslate, paint, value);
-        parseProperty<Function<TranslateAnchorType>>("icon-translate-anchor", PropertyKey::IconTranslateAnchor, paint, value);
-
-        parseProperty<Function<float>>("text-opacity", PropertyKey::TextOpacity, paint, value);
-        parseProperty<PropertyTransition>("text-opacity-transition", PropertyKey::TextOpacity, paint, value);
-        parseProperty<Function<Color>>("text-color", PropertyKey::TextColor, paint, value);
-        parseProperty<PropertyTransition>("text-color-transition", PropertyKey::TextColor, paint, value);
-        parseProperty<Function<Color>>("text-halo-color", PropertyKey::TextHaloColor, paint, value);
-        parseProperty<PropertyTransition>("text-halo-color-transition", PropertyKey::TextHaloColor, paint, value);
-        parseProperty<Function<float>>("text-halo-width", PropertyKey::TextHaloWidth, paint, value);
-        parseProperty<PropertyTransition>("text-halo-width-transition", PropertyKey::TextHaloWidth, paint, value);
-        parseProperty<Function<float>>("text-halo-blur", PropertyKey::TextHaloBlur, paint, value);
-        parseProperty<PropertyTransition>("text-halo-blur-transition", PropertyKey::TextHaloBlur, paint, value);
-        parseProperty<Function<std::array<float, 2>>>("text-translate", PropertyKey::TextTranslate, paint, value);
-        parseProperty<PropertyTransition>("text-translate-transition", PropertyKey::TextTranslate, paint, value);
-        parseProperty<Function<TranslateAnchorType>>("text-translate-anchor", PropertyKey::TextTranslateAnchor, paint, value);
-    });
+    paint.parse(layer);
 }
 
 void SymbolLayer::cascade(const StyleCascadeParameters& parameters) {
-    paints.cascade(parameters);
+    paint.cascade(parameters);
 }
 
 bool SymbolLayer::hasTransitions() const {
-    return paints.hasTransitions();
+    return paint.hasTransitions();
 }
 
 void SymbolLayer::recalculate(const StyleCalculationParameters& parameters) {
-    paints.removeExpiredTransitions(parameters.now);
-
-    paints.calculateTransitioned(PropertyKey::IconOpacity, properties.icon.opacity, parameters);
-    paints.calculateTransitioned(PropertyKey::IconColor, properties.icon.color, parameters);
-    paints.calculateTransitioned(PropertyKey::IconHaloColor, properties.icon.halo_color, parameters);
-    paints.calculateTransitioned(PropertyKey::IconHaloWidth, properties.icon.halo_width, parameters);
-    paints.calculateTransitioned(PropertyKey::IconHaloBlur, properties.icon.halo_blur, parameters);
-    paints.calculateTransitioned(PropertyKey::IconTranslate, properties.icon.translate, parameters);
-    paints.calculate(PropertyKey::IconTranslateAnchor, properties.icon.translate_anchor, parameters);
-
-    paints.calculateTransitioned(PropertyKey::TextOpacity, properties.text.opacity, parameters);
-    paints.calculateTransitioned(PropertyKey::TextColor, properties.text.color, parameters);
-    paints.calculateTransitioned(PropertyKey::TextHaloColor, properties.text.halo_color, parameters);
-    paints.calculateTransitioned(PropertyKey::TextHaloWidth, properties.text.halo_width, parameters);
-    paints.calculateTransitioned(PropertyKey::TextHaloBlur, properties.text.halo_blur, parameters);
-    paints.calculateTransitioned(PropertyKey::TextTranslate, properties.text.translate, parameters);
-    paints.calculate(PropertyKey::TextTranslateAnchor, properties.text.translate_anchor, parameters);
+    passes = paint.recalculate(parameters);
 
     // text-size and icon-size are layout properties but they also need to be evaluated as paint properties:
-    properties.icon.size = layout.icon.size.calculate(parameters.z);
-    properties.text.size = layout.text.size.calculate(parameters.z);
-
-    passes = properties.isVisible() ? RenderPass::Translucent : RenderPass::None;
+    paint.icon.size = layout.icon.size.calculate(parameters.z);
+    paint.text.size = layout.text.size.calculate(parameters.z);
 }
 
 std::unique_ptr<Bucket> SymbolLayer::createBucket(StyleBucketParameters& parameters) const {

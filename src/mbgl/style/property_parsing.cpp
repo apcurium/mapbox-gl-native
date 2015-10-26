@@ -1,34 +1,15 @@
 #include <mbgl/style/property_parsing.hpp>
+#include <mbgl/style/property_transition.hpp>
+#include <mbgl/style/function_properties.hpp>
+#include <mbgl/style/piecewisefunction_properties.hpp>
 
 #include <mbgl/platform/log.hpp>
 
 #include <csscolorparser/csscolorparser.hpp>
 
+#include <vector>
+
 namespace mbgl {
-namespace detail {
-
-optional<std::vector<float>> parseFloatArray(const JSVal& value) {
-    if (!value.IsArray()) {
-        Log::Warning(Event::ParseStyle, "dasharray value must be an array of numbers");
-        return {};
-    }
-
-    std::vector<float> result;
-
-    for (rapidjson::SizeType i = 0; i < value.Size(); ++i) {
-        const JSVal& part = value[i];
-
-        if (!part.IsNumber()) {
-            Log::Warning(Event::ParseStyle, "dasharray value must be an array of numbers");
-            return {};
-        }
-
-        result.push_back(part.GetDouble());
-    }
-
-    return result;
-}
-
 
 template <>
 optional<bool> parseProperty(const char* name, const JSVal& value) {
@@ -381,15 +362,26 @@ optional<PiecewiseConstantFunction<T>> parsePiecewiseConstantFunction(const JSVa
 }
 
 template <>
-optional<Faded<std::vector<float>>> parseProperty(const char*, const JSVal& value) {
-    auto floatarray = parseFloatArray(value);
-    if (!floatarray) {
+optional<std::vector<float>> parseProperty(const char* name, const JSVal& value) {
+    if (!value.IsArray()) {
+        Log::Warning(Event::ParseStyle, "value of '%s' must be an array of numbers", name);
         return {};
     }
 
-    Faded<std::vector<float>> parsed;
-    parsed.to = *floatarray;
-    return parsed;
+    std::vector<float> result;
+
+    for (rapidjson::SizeType i = 0; i < value.Size(); ++i) {
+        const JSVal& part = value[i];
+
+        if (!part.IsNumber()) {
+            Log::Warning(Event::ParseStyle, "value of '%s' must be an array of numbers", name);
+            return {};
+        }
+
+        result.push_back(part.GetDouble());
+    }
+
+    return result;
 }
 
 template <>
@@ -430,5 +422,4 @@ optional<PiecewiseConstantFunction<Faded<std::string>>> parseProperty(const char
     return PiecewiseConstantFunction<Faded<std::string>>(*constant);
 }
 
-}
 }

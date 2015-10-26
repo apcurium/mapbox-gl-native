@@ -4,37 +4,51 @@
 
 namespace mbgl {
 
+void BackgroundPaintProperties::parse(const JSVal& layer) {
+    eachPaint(layer, [&] (const JSVal& value, ClassID classID) {
+        opacity.parse("background-opacity", value, classID);
+        color.parse("background-color", value, classID);
+        pattern.parse("background-pattern", value, classID);
+    });
+}
+
+void BackgroundPaintProperties::cascade(const StyleCascadeParameters& parameters) {
+    opacity.cascade(parameters);
+    color.cascade(parameters);
+    pattern.cascade(parameters);
+}
+
+RenderPass BackgroundPaintProperties::recalculate(const StyleCalculationParameters& parameters) {
+//    removeExpiredTransitions(parameters.now);
+
+    opacity.calculate(parameters);
+    color.calculate(parameters);
+    pattern.calculate(parameters);
+
+    return opacity > 0 ? RenderPass::Translucent : RenderPass::None;
+}
+
 std::unique_ptr<StyleLayer> BackgroundLayer::clone() const {
     std::unique_ptr<BackgroundLayer> result = std::make_unique<BackgroundLayer>();
     result->copy(*this);
-    result->paints.paints = paints.paints;
+    result->paint = paint;
     return std::move(result);
 }
 
 void BackgroundLayer::parsePaints(const JSVal& layer) {
-    paints.parseEach(layer, [&] (ClassProperties& paint, const JSVal& value) {
-        parseProperty<Function<float>>("background-opacity", PropertyKey::BackgroundOpacity, paint, value);
-        parseProperty<Function<Color>>("background-color", PropertyKey::BackgroundColor, paint, value);
-        parseProperty<PiecewiseConstantFunction<Faded<std::string>>>("background-pattern", PropertyKey::BackgroundImage, paint, value, "background-pattern-transition");
-    });
+    paint.parse(layer);
 }
 
 void BackgroundLayer::cascade(const StyleCascadeParameters& parameters) {
-    paints.cascade(parameters);
-}
-
-bool BackgroundLayer::hasTransitions() const {
-    return paints.hasTransitions();
+    paint.cascade(parameters);
 }
 
 void BackgroundLayer::recalculate(const StyleCalculationParameters& parameters) {
-    paints.removeExpiredTransitions(parameters.now);
+    passes = paint.recalculate(parameters);
+}
 
-    paints.calculateTransitioned(PropertyKey::BackgroundOpacity, properties.opacity, parameters);
-    paints.calculateTransitioned(PropertyKey::BackgroundColor, properties.color, parameters);
-    paints.calculate(PropertyKey::BackgroundImage, properties.image, parameters);
-
-    passes = properties.isVisible() ? RenderPass::Translucent : RenderPass::None;
+bool BackgroundLayer::hasTransitions() const {
+    return paint.hasTransitions();
 }
 
 std::unique_ptr<Bucket> BackgroundLayer::createBucket(StyleBucketParameters&) const {
