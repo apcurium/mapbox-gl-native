@@ -43,8 +43,6 @@ final class UserLocationView extends View {
 
     private MapView mMapView;
 
-    private static final int BLUE_COLOR = 0x39ACCBFF;
-
     private float mDensity;
 
     private boolean mShowMarker;
@@ -137,6 +135,8 @@ final class UserLocationView extends View {
 
         // Setup the custom paint
         Resources resources = context.getResources();
+        int accuracyColor = resources.getColor(R.color.user_location_ring);
+
         mDensity = resources.getDisplayMetrics().density;
         mMarkerCoordinate = new LatLng(0.0, 0.0);
         mMarkerScreenPoint = new PointF();
@@ -145,14 +145,14 @@ final class UserLocationView extends View {
         mAccuracyPaintFill = new Paint();
         mAccuracyPaintFill.setAntiAlias(true);
         mAccuracyPaintFill.setStyle(Paint.Style.FILL);
-        mAccuracyPaintFill.setColor(BLUE_COLOR);
+        mAccuracyPaintFill.setColor(accuracyColor);
         mAccuracyPaintFill.setAlpha((int) (255 * 0.25f));
 
         mAccuracyPaintStroke = new Paint();
         mAccuracyPaintStroke.setAntiAlias(true);
         mAccuracyPaintStroke.setStyle(Paint.Style.STROKE);
         mAccuracyPaintStroke.setStrokeWidth(0.5f * mDensity);
-        mAccuracyPaintStroke.setColor(BLUE_COLOR);
+        mAccuracyPaintStroke.setColor(accuracyColor);
         mAccuracyPaintStroke.setAlpha((int) (255 * 0.5f));
 
         mAccuracyPath = new Path();
