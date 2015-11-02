@@ -1,15 +1,16 @@
 #include <mbgl/layer/line_layer.hpp>
-#include <mbgl/style/style_bucket.hpp>
 #include <mbgl/style/property_parsing.hpp>
+#include <mbgl/style/style_bucket_parameters.hpp>
+#include <mbgl/renderer/line_bucket.hpp>
 #include <mbgl/map/tile_id.hpp>
 
 namespace mbgl {
 
 void LineLayer::parseLayout(const JSVal& value) {
-    parseProperty<Function<CapType>>("line-cap", PropertyKey::LineCap, bucket->layout, value);
-    parseProperty<Function<JoinType>>("line-join", PropertyKey::LineJoin, bucket->layout, value);
-    parseProperty<Function<float>>("line-miter-limit", PropertyKey::LineMiterLimit, bucket->layout, value);
-    parseProperty<Function<float>>("line-round-limit", PropertyKey::LineRoundLimit, bucket->layout, value);
+    parseProperty<Function<CapType>>("line-cap", PropertyKey::LineCap, layout, value);
+    parseProperty<Function<JoinType>>("line-join", PropertyKey::LineJoin, layout, value);
+    parseProperty<Function<float>>("line-miter-limit", PropertyKey::LineMiterLimit, layout, value);
+    parseProperty<Function<float>>("line-round-limit", PropertyKey::LineRoundLimit, layout, value);
 }
 
 void LineLayer::parsePaints(const JSVal& layer) {
@@ -51,6 +52,23 @@ void LineLayer::recalculate(const StyleCalculationParameters& parameters) {
     paints.calculate(PropertyKey::LineWidth, properties.dash_line_width, dashArrayParams);
 
     passes = properties.isVisible() ? RenderPass::Translucent : RenderPass::None;
+}
+
+std::unique_ptr<Bucket> LineLayer::createBucket(StyleBucketParameters& parameters) const {
+    auto bucket = std::make_unique<LineBucket>();
+
+    const float z = parameters.tileID.z;
+
+    layout.calculate(PropertyKey::LineCap, bucket->layout.cap, z);
+    layout.calculate(PropertyKey::LineJoin, bucket->layout.join, z);
+    layout.calculate(PropertyKey::LineMiterLimit, bucket->layout.miter_limit, z);
+    layout.calculate(PropertyKey::LineRoundLimit, bucket->layout.round_limit, z);
+
+    parameters.eachFilteredFeature(filter, [&] (const auto& feature) {
+        bucket->addGeometry(feature.getGeometries());
+    });
+
+    return std::move(bucket);
 }
 
 }

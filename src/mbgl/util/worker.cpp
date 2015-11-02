@@ -16,29 +16,26 @@ public:
 
     void parseRasterTile(std::unique_ptr<RasterBucket> bucket,
                          const std::shared_ptr<const std::string> data,
-                         std::function<void(TileParseResult)> callback) {
+                         std::function<void(RasterTileParseResult)> callback) {
         std::unique_ptr<util::Image> image(new util::Image(*data));
         if (!(*image)) {
-            callback(TileParseResult("error parsing raster image"));
+            callback(RasterTileParseResult("error parsing raster image"));
         }
 
         if (!bucket->setImage(std::move(image))) {
-            callback(TileParseResult("error setting raster image to bucket"));
+            callback(RasterTileParseResult("error setting raster image to bucket"));
         }
 
-        TileParseResultBuckets result;
-        result.buckets.emplace_back("raster", std::move(bucket));
-        result.state = TileData::State::parsed;
-
-        callback(std::move(result));
+        callback(RasterTileParseResult(std::move(bucket)));
     }
 
     void parseGeometryTile(TileWorker* worker,
+                           std::vector<util::ptr<StyleLayer>> layers,
                            std::unique_ptr<GeometryTile> tile,
                            PlacementConfig config,
                            std::function<void(TileParseResult)> callback) {
         try {
-            callback(worker->parseAllLayers(*tile, config));
+            callback(worker->parseAllLayers(layers, *tile, config));
         } catch (const std::exception& ex) {
             callback(TileParseResult(ex.what()));
         }
@@ -54,10 +51,11 @@ public:
     }
 
     void redoPlacement(TileWorker* worker,
+                       std::vector<util::ptr<StyleLayer>> layers,
                        const std::unordered_map<std::string, std::unique_ptr<Bucket>>* buckets,
                        PlacementConfig config,
                        std::function<void()> callback) {
-        worker->redoPlacement(buckets, config);
+        worker->redoPlacement(layers, buckets, config);
         callback();
     }
 };
@@ -74,7 +72,7 @@ Worker::~Worker() = default;
 std::unique_ptr<WorkRequest>
 Worker::parseRasterTile(std::unique_ptr<RasterBucket> bucket,
                         const std::shared_ptr<const std::string> data,
-                        std::function<void(TileParseResult)> callback) {
+                        std::function<void(RasterTileParseResult)> callback) {
     current = (current + 1) % threads.size();
     return threads[current]->invokeWithCallback(&Worker::Impl::parseRasterTile, callback, bucket,
                                                 data);
@@ -82,12 +80,13 @@ Worker::parseRasterTile(std::unique_ptr<RasterBucket> bucket,
 
 std::unique_ptr<WorkRequest>
 Worker::parseGeometryTile(TileWorker& worker,
+                          std::vector<util::ptr<StyleLayer>> layers,
                           std::unique_ptr<GeometryTile> tile,
                           PlacementConfig config,
                           std::function<void(TileParseResult)> callback) {
     current = (current + 1) % threads.size();
     return threads[current]->invokeWithCallback(&Worker::Impl::parseGeometryTile, callback, &worker,
-                                                std::move(tile), config);
+                                                std::move(layers), std::move(tile), config);
 }
 
 std::unique_ptr<WorkRequest>
@@ -100,12 +99,13 @@ Worker::parsePendingGeometryTileLayers(TileWorker& worker,
 
 std::unique_ptr<WorkRequest>
 Worker::redoPlacement(TileWorker& worker,
+                      std::vector<util::ptr<StyleLayer>> layers,
                       const std::unordered_map<std::string, std::unique_ptr<Bucket>>& buckets,
                       PlacementConfig config,
                       std::function<void()> callback) {
     current = (current + 1) % threads.size();
     return threads[current]->invokeWithCallback(&Worker::Impl::redoPlacement, callback, &worker,
-                                                &buckets, config);
+                                                layers, &buckets, config);
 }
 
 } // end namespace mbgl

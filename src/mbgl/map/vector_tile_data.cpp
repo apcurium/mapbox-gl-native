@@ -1,7 +1,6 @@
 #include <mbgl/map/vector_tile_data.hpp>
 #include <mbgl/map/geometry_tile.hpp>
 #include <mbgl/style/style_layer.hpp>
-#include <mbgl/style/style_bucket.hpp>
 #include <mbgl/util/worker.hpp>
 #include <mbgl/util/work_request.hpp>
 #include <mbgl/style/style.hpp>
@@ -16,16 +15,16 @@ VectorTileData::VectorTileData(const TileID& id_,
                                Style& style_,
                                const std::function<void()>& callback)
     : TileData(id_),
+      style(style_),
       worker(style_.workers),
       tileWorker(id_,
                  sourceID,
                  style_,
-                 style_.layers,
                  state),
       monitor(std::move(monitor_))
 {
     state = State::loading;
-    req = monitor->monitorTile([callback, sourceID, this](std::exception_ptr err, std::unique_ptr<GeometryTile> tile) {
+    req = monitor->monitorTile([callback, this](std::exception_ptr err, std::unique_ptr<GeometryTile> tile) {
         if (err) {
             try {
                 std::rethrow_exception(err);
@@ -39,6 +38,7 @@ VectorTileData::VectorTileData(const TileID& id_,
 
         if (!tile) {
             state = State::parsed;
+            buckets.clear();
             callback();
             return;
         }
@@ -53,7 +53,7 @@ VectorTileData::VectorTileData(const TileID& id_,
         // when tile data changed. Replacing the workdRequest will cancel a pending work
         // request in case there is one.
         workRequest.reset();
-        workRequest = worker.parseGeometryTile(tileWorker, std::move(tile), targetConfig, [callback, sourceID, this, config = targetConfig] (TileParseResult result) {
+        workRequest = worker.parseGeometryTile(tileWorker, style.layers, std::move(tile), targetConfig, [callback, this, config = targetConfig] (TileParseResult result) {
             workRequest.reset();
             if (state == State::obsolete) {
                 return;
@@ -69,9 +69,7 @@ VectorTileData::VectorTileData(const TileID& id_,
 
                 // Move over all buckets we received in this parse request, potentially overwriting
                 // existing buckets in case we got a refresh parse.
-                for (auto& bucket : resultBuckets.buckets) {
-                    buckets[bucket.first] = std::move(bucket.second);
-                }
+                buckets = std::move(resultBuckets.buckets);
 
                 // The target configuration could have changed since we started placement. In this case,
                 // we're starting another placement run.
@@ -136,11 +134,7 @@ bool VectorTileData::parsePending(std::function<void()> callback) {
 }
 
 Bucket* VectorTileData::getBucket(const StyleLayer& layer) {
-    if (!layer.bucket) {
-        return nullptr;
-    }
-
-    const auto it = buckets.find(layer.bucket->name);
+    const auto it = buckets.find(layer.bucketName());
     if (it == buckets.end()) {
         return nullptr;
     }
@@ -163,7 +157,7 @@ void VectorTileData::redoPlacement(const PlacementConfig newConfig) {
 
 void VectorTileData::redoPlacement() {
     workRequest.reset();
-    workRequest = worker.redoPlacement(tileWorker, buckets, targetConfig, [this, config = targetConfig] {
+    workRequest = worker.redoPlacement(tileWorker, style.layers, buckets, targetConfig, [this, config = targetConfig] {
         workRequest.reset();
 
         // Persist the configuration we just placed so that we can later check whether we need to

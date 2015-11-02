@@ -13,7 +13,6 @@
       ],
 
       'dependencies': [
-        '../mbgl.gyp:bundle_styles',
         '../mbgl.gyp:core',
         '../mbgl.gyp:platform-<(platform_lib)',
         '../mbgl.gyp:http-<(http_lib)',
@@ -28,8 +27,6 @@
         '../platform/darwin/reachability.m',
         '../platform/default/glfw_view.hpp',
         '../platform/default/glfw_view.cpp',
-        '../platform/default/default_styles.hpp',
-        '../platform/default/default_styles.cpp',
       ],
 
       'variables' : {
