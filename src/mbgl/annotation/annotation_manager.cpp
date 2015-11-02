@@ -1,7 +1,6 @@
 #include <mbgl/annotation/annotation_manager.hpp>
 #include <mbgl/annotation/annotation_tile.hpp>
 #include <mbgl/style/style.hpp>
-#include <mbgl/style/style_bucket.hpp>
 #include <mbgl/layer/symbol_layer.hpp>
 
 #include <boost/function_output_iterator.hpp>
@@ -119,12 +118,10 @@ void AnnotationManager::updateStyle(Style& style) {
         layer->id = PointLayerID;
         layer->type = StyleLayerType::Symbol;
 
-        layer->bucket = std::make_shared<StyleBucket>(layer->type);
-        layer->bucket->name = layer->id;
-        layer->bucket->source = SourceID;
-        layer->bucket->source_layer = PointLayerID;
-        layer->bucket->layout.set(PropertyKey::IconImage, ConstantFunction<std::string>("{sprite}"));
-        layer->bucket->layout.set(PropertyKey::IconAllowOverlap, ConstantFunction<bool>(true));
+        layer->source = SourceID;
+        layer->sourceLayer = PointLayerID;
+        layer->layout.set(PropertyKey::IconImage, ConstantFunction<std::string>("{sprite}"));
+        layer->layout.set(PropertyKey::IconAllowOverlap, ConstantFunction<bool>(true));
 
         style.addLayer(std::move(layer));
     }
@@ -134,11 +131,25 @@ void AnnotationManager::updateStyle(Style& style) {
     }
 
     for (const auto& layer : obsoleteShapeAnnotationLayers) {
-        style.removeLayer(layer);
+        if (style.getLayer(layer)) {
+            style.removeLayer(layer);
+        }
     }
 
     obsoleteShapeAnnotationLayers.clear();
-    style.getSource(SourceID)->invalidateTiles();
+
+    for (auto& monitor : monitors) {
+        monitor->update(getTile(monitor->tileID));
+    }
+}
+
+void AnnotationManager::addTileMonitor(AnnotationTileMonitor& monitor) {
+    monitors.insert(&monitor);
+    monitor.update(getTile(monitor.tileID));
+}
+
+void AnnotationManager::removeTileMonitor(AnnotationTileMonitor& monitor) {
+    monitors.erase(&monitor);
 }
 
 }

@@ -13,7 +13,6 @@
         '../mbgl.gyp:http-<(http_lib)',
         '../mbgl.gyp:asset-<(asset_lib)',
         '../mbgl.gyp:cache-<(cache_lib)',
-        '../mbgl.gyp:copy_styles',
         '../mbgl.gyp:copy_certificate_bundle',
       ],
 
@@ -23,8 +22,6 @@
         '../platform/default/glfw_view.hpp',
         '../platform/default/glfw_view.cpp',
         '../platform/default/log_stderr.cpp',
-        '../platform/default/default_styles.hpp',
-        '../platform/default/default_styles.cpp',
       ],
 
       'variables' : {
