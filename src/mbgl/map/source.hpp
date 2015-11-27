@@ -5,7 +5,6 @@
 #include <mbgl/map/tile_data.hpp>
 #include <mbgl/map/tile_cache.hpp>
 #include <mbgl/style/types.hpp>
-#include <mbgl/storage/request_holder.hpp>
 
 #include <mbgl/util/noncopyable.hpp>
 #include <mbgl/util/mat4.hpp>
@@ -27,7 +26,7 @@ class MapData;
 class TexturePool;
 class Style;
 class Painter;
-class Request;
+class FileRequest;
 class TransformState;
 class Tile;
 struct ClipID;
@@ -63,7 +62,7 @@ public:
         virtual void onTileLoadingFailed(std::exception_ptr error) = 0;
     };
 
-    Source();
+    Source(MapData&);
     ~Source();
 
     void load();
@@ -73,8 +72,7 @@ public:
     // will return true if all the tiles were scheduled for updating of false if
     // they were not. shouldReparsePartialTiles must be set to "true" if there is
     // new data available that a tile in the "partial" state might be interested at.
-    bool update(MapData&,
-                const TransformState&,
+    bool update(const TransformState&,
                 Style&,
                 TexturePool&,
                 bool shouldReparsePartialTiles);
@@ -96,7 +94,7 @@ public:
     bool enabled;
 
 private:
-    void tileLoadingCompleteCallback(const TileID& normalized_id, const TransformState& transformState, bool collisionDebug);
+    void tileLoadingCompleteCallback(const TileID&, const TransformState&);
 
     void emitSourceLoaded();
     void emitSourceLoadingFailed(const std::string& message);
@@ -109,8 +107,7 @@ private:
     int32_t coveringZoomLevel(const TransformState&) const;
     std::forward_list<TileID> coveringTiles(const TransformState&) const;
 
-    TileData::State addTile(MapData&,
-                            const TransformState&,
+    TileData::State addTile(const TransformState&,
                             Style&,
                             TexturePool&,
                             const TileID&);
@@ -120,6 +117,8 @@ private:
 
     double getZoom(const TransformState &state) const;
 
+    MapData& data;
+
     bool loaded = false;
 
     // Stores the time when this source was most recently updated.
@@ -127,10 +126,10 @@ private:
 
     std::map<TileID, std::unique_ptr<Tile>> tiles;
     std::vector<Tile*> tilePtrs;
-    std::map<TileID, std::weak_ptr<TileData>> tile_data;
+    std::map<TileID, std::weak_ptr<TileData>> tileDataMap;
     TileCache cache;
 
-    RequestHolder req;
+    std::unique_ptr<FileRequest> req;
     Observer* observer_ = nullptr;
 };
 

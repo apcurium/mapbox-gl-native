@@ -82,7 +82,7 @@ struct RenderItem {
 
 class Painter : private util::noncopyable {
 public:
-    Painter(MapData& data);
+    Painter(MapData&, TransformState&);
     ~Painter();
 
     // Renders the backdrop of the OpenGL view. This also paints in areas where we don't have any
@@ -93,7 +93,6 @@ public:
     void changeMatrix();
 
     void render(const Style& style,
-                TransformState state,
                 const FrameData& frame);
 
     // Renders debug information for a tile.
@@ -134,12 +133,12 @@ public:
 
     bool needsAnimation() const;
 
-    void updateRenderOrder(const Style& style);
-
 private:
     void setup();
     void setupShaders();
     mat4 translatedMatrix(const mat4& matrix, const std::array<float, 2> &translation, const TileID &id, TranslateAnchorType anchor);
+
+    std::vector<RenderItem> determineRenderOrder(const Style& style);
 
     template <class Iterator>
     void renderPass(RenderPass,
@@ -182,8 +181,7 @@ public:
 
 private:
     MapData& data;
-
-    TransformState state;
+    TransformState& state;
     FrameData frame;
 
     int indent = 0;
@@ -197,8 +195,6 @@ private:
     GLsizei currentLayer;
     float depthRangeSize;
     const float depthEpsilon = 1.0f / (1 << 16);
-
-    std::vector<RenderItem> order;
 
 public:
     FrameHistory frameHistory;

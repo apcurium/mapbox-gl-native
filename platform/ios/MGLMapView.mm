@@ -10,8 +10,9 @@
 #include <mbgl/mbgl.hpp>
 #include <mbgl/annotation/point_annotation.hpp>
 #include <mbgl/annotation/shape_annotation.hpp>
-#include <mbgl/annotation/sprite_image.hpp>
+#include <mbgl/sprite/sprite_image.hpp>
 #include <mbgl/map/camera.hpp>
+#include <mbgl/map/mode.hpp>
 #include <mbgl/platform/platform.hpp>
 #include <mbgl/platform/darwin/reachability.h>
 #include <mbgl/storage/sqlite_cache.hpp>
@@ -44,7 +45,7 @@
 class MBGLView;
 
 NSString *const MGLDefaultStyleMarkerSymbolName = @"default_marker";
-NSString *const MGLMapboxSetupDocumentationURLDisplayString = @"mapbox.com/guides/first-steps-ios-sdk";
+NSString *const MGLMapboxSetupDocumentationURLDisplayString = @"mapbox.com/help/first-steps-ios-sdk";
 
 const NSTimeInterval MGLAnimationDuration = 0.3;
 const CGSize MGLAnnotationUpdateViewportOutset = {150, 150};
@@ -53,7 +54,7 @@ const CGFloat MGLMinimumPitch = 0;
 const CGFloat MGLMaximumPitch = 60;
 const CLLocationDegrees MGLAngularFieldOfView = M_PI / 6.;
 const std::string spritePrefix = "com.mapbox.sprites.";
-const NSUInteger MGLTargetFrameInterval = 2;  //Target FPS will be 60 divided by this value
+const NSUInteger MGLTargetFrameInterval = 1;  //Target FPS will be 60 divided by this value
 
 NSString *const MGLAnnotationIDKey = @"MGLAnnotationIDKey";
 NSString *const MGLAnnotationSymbolKey = @"MGLAnnotationSymbolKey";
@@ -82,7 +83,6 @@ mbgl::util::UnitBezier MGLUnitBezierForMediaTimingFunction(CAMediaTimingFunction
 @property (nonatomic) EAGLContext *context;
 @property (nonatomic) GLKView *glView;
 @property (nonatomic) UIImageView *glSnapshotView;
-@property (nonatomic) NSOperationQueue *regionChangeDelegateQueue;
 @property (nonatomic, readwrite) UIImageView *compassView;
 @property (nonatomic, readwrite) UIImageView *logoView;
 @property (nonatomic) NS_MUTABLE_ARRAY_OF(NSLayoutConstraint *) *logoViewConstraints;
@@ -106,7 +106,6 @@ mbgl::util::UnitBezier MGLUnitBezierForMediaTimingFunction(CAMediaTimingFunction
 @property (nonatomic) CGFloat angle;
 @property (nonatomic) CGFloat quickZoomStart;
 @property (nonatomic, getter=isDormant) BOOL dormant;
-@property (nonatomic, getter=isAnimatingGesture) BOOL animatingGesture;
 @property (nonatomic, readonly, getter=isRotationAllowed) BOOL rotationAllowed;
 
 @end
@@ -128,13 +127,15 @@ mbgl::util::UnitBezier MGLUnitBezierForMediaTimingFunction(CAMediaTimingFunction
 
     CADisplayLink *_displayLink;
     BOOL _needsDisplayRefresh;
+    
+    NSUInteger _changeDelimiterSuppressionDepth;
 }
 
 #pragma mark - Setup & Teardown -
 
 @dynamic debugActive;
 
-std::chrono::steady_clock::duration secondsAsDuration(float duration)
+std::chrono::steady_clock::duration durationInSeconds(float duration)
 {
     return std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<float, std::chrono::seconds::period>(duration));
 }
@@ -192,8 +193,8 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
 
     if ( ! [styleURL scheme])
     {
-        // Assume a relative path into the developer’s bundle.
-        styleURL = [[NSBundle mainBundle] URLForResource:styleURL.path withExtension:nil];
+        // Assume a relative path into the application bundle.
+        styleURL = [NSURL URLWithString:[@"asset://" stringByAppendingString:[styleURL absoluteString]]];
     }
 
     _mbglMap->setStyleURL([[styleURL absoluteString] UTF8String]);
@@ -233,7 +234,7 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
     // setup refresh driver
     _displayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(updateFromDisplayLink)];
     _displayLink.frameInterval = MGLTargetFrameInterval;
-    [_displayLink addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSDefaultRunLoopMode];
+    [_displayLink addToRunLoop:[NSRunLoop currentRunLoop] forMode:NSRunLoopCommonModes];
     _needsDisplayRefresh = YES;
 
     // start paused if in IB
@@ -292,10 +293,11 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
     _compassView.accessibilityLabel = @"Compass";
     _compassView.frame = CGRectMake(0, 0, _compassView.image.size.width, _compassView.image.size.height);
     _compassView.alpha = 0;
+    _compassView.userInteractionEnabled = YES;
+    [_compassView addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleCompassTapGesture:)]];
     UIView *container = [[UIView alloc] initWithFrame:CGRectZero];
     [container addSubview:_compassView];
     container.translatesAutoresizingMaskIntoConstraints = NO;
-    [container addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleCompassTapGesture:)]];
     [self addSubview:container];
 
     // setup interaction
@@ -351,7 +353,6 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
     // observe app activity
     //
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(willTerminate) name:UIApplicationWillTerminateNotification object:nil];
-    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(sleepGL:) name:UIApplicationWillResignActiveNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(sleepGL:) name:UIApplicationDidEnterBackgroundNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(wakeGL:) name:UIApplicationWillEnterForegroundNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(wakeGL:) name:UIApplicationDidBecomeActiveNotification object:nil];
@@ -365,11 +366,6 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
     _mbglMap->jumpTo(options);
     _pendingLatitude = NAN;
     _pendingLongitude = NAN;
-
-    // setup change delegate queue
-    //
-    _regionChangeDelegateQueue = [NSOperationQueue new];
-    _regionChangeDelegateQueue.maxConcurrentOperationCount = 1;
 
     // metrics: map load event
     mbgl::LatLng latLng = _mbglMap->getLatLng();
@@ -434,8 +430,6 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
 
 - (void)dealloc
 {
-    [_regionChangeDelegateQueue cancelAllOperations];
-
     [[NSNotificationCenter defaultCenter] removeObserver:self];
     [[MGLAccountManager sharedManager] removeObserver:self forKeyPath:@"accessToken"];
 
@@ -534,14 +528,7 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
     // compass
     //
     UIView *compassContainer = self.compassView.superview;
-    if ([NSLayoutConstraint respondsToSelector:@selector(deactivateConstraints:)])
-    {
-        [NSLayoutConstraint deactivateConstraints:compassContainer.constraints];
-    }
-    else
-    {
-        [compassContainer removeConstraints:compassContainer.constraints];
-    }
+    [compassContainer removeConstraints:compassContainer.constraints];
 
     NSMutableArray *compassContainerConstraints = [NSMutableArray array];
     if (viewController)
@@ -573,7 +560,7 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
                                  multiplier:1
                                    constant:5]];
 
-    [compassContainer addConstraint:
+    [compassContainerConstraints addObject:
      [NSLayoutConstraint constraintWithItem:compassContainer
                                   attribute:NSLayoutAttributeWidth
                                   relatedBy:NSLayoutRelationEqual
@@ -582,7 +569,7 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
                                  multiplier:1
                                    constant:self.compassView.image.size.width]];
 
-    [compassContainer addConstraint:
+    [compassContainerConstraints addObject:
      [NSLayoutConstraint constraintWithItem:compassContainer
                                   attribute:NSLayoutAttributeHeight
                                   relatedBy:NSLayoutRelationEqual
@@ -590,25 +577,11 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
                                   attribute:NSLayoutAttributeNotAnAttribute
                                  multiplier:1
                                    constant:self.compassView.image.size.height]];
-    if ([NSLayoutConstraint respondsToSelector:@selector(activateConstraints:)])
-    {
-        [NSLayoutConstraint activateConstraints:compassContainerConstraints];
-    }
-    else
-    {
-        [constraintParentView addConstraints:compassContainerConstraints];
-    }
+    [constraintParentView addConstraints:compassContainerConstraints];
 
     // logo bug
     //
-    if ([NSLayoutConstraint respondsToSelector:@selector(deactivateConstraints:)])
-    {
-        [NSLayoutConstraint deactivateConstraints:self.logoViewConstraints];
-    }
-    else
-    {
-        [self.logoView removeConstraints:self.logoViewConstraints];
-    }
+    [self.logoView removeConstraints:self.logoViewConstraints];
     [self.logoViewConstraints removeAllObjects];
     if (viewController)
     {
@@ -638,25 +611,11 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
                                   attribute:NSLayoutAttributeLeading
                                  multiplier:1
                                    constant:8]];
-    if ([NSLayoutConstraint respondsToSelector:@selector(activateConstraints:)])
-    {
-        [NSLayoutConstraint activateConstraints:self.logoViewConstraints];
-    }
-    else
-    {
-        [constraintParentView addConstraints:self.logoViewConstraints];
-    }
+    [constraintParentView addConstraints:self.logoViewConstraints];
 
     // attribution button
     //
-    if ([NSLayoutConstraint respondsToSelector:@selector(deactivateConstraints:)])
-    {
-        [NSLayoutConstraint deactivateConstraints:self.attributionButtonConstraints];
-    }
-    else
-    {
-        [self.attributionButton removeConstraints:self.attributionButtonConstraints];
-    }
+    [self.attributionButton removeConstraints:self.attributionButtonConstraints];
     [self.attributionButtonConstraints removeAllObjects];
     if (viewController)
     {
@@ -686,14 +645,7 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
                                   attribute:NSLayoutAttributeTrailing
                                  multiplier:1
                                    constant:8]];
-    if ([NSLayoutConstraint respondsToSelector:@selector(activateConstraints:)])
-    {
-        [NSLayoutConstraint activateConstraints:self.attributionButtonConstraints];
-    }
-    else
-    {
-        [constraintParentView addConstraints:self.attributionButtonConstraints];
-    }
+    [constraintParentView addConstraints:self.attributionButtonConstraints];
 
     [super updateConstraints];
 }
@@ -789,13 +741,14 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
         {
             self.glSnapshotView = [[UIImageView alloc] initWithFrame:self.glView.frame];
             self.glSnapshotView.autoresizingMask = self.glView.autoresizingMask;
+            self.glSnapshotView.contentMode = UIViewContentModeCenter;
             [self insertSubview:self.glSnapshotView aboveSubview:self.glView];
         }
 
         self.glSnapshotView.image = self.glView.snapshot;
         self.glSnapshotView.hidden = NO;
 
-        if (_mbglMap->getDebug() && [self.glSnapshotView.subviews count] == 0)
+        if (_mbglMap->getDebug() != mbgl::MapDebugOptions::NoDebug && [self.glSnapshotView.subviews count] == 0)
         {
             UIView *snapshotTint = [[UIView alloc] initWithFrame:self.glSnapshotView.bounds];
             snapshotTint.autoresizingMask = self.glSnapshotView.autoresizingMask;
@@ -857,9 +810,32 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
 
 - (void)touchesBegan:(__unused NS_SET_OF(UITouch *) *)touches withEvent:(__unused UIEvent *)event
 {
-    _mbglMap->cancelTransitions();
+    _changeDelimiterSuppressionDepth = 0;
     _mbglMap->setGestureInProgress(false);
-    self.animatingGesture = NO;
+    _mbglMap->cancelTransitions();
+}
+
+- (void)notifyGestureDidBegin {
+    [self notifyMapChange:mbgl::MapChangeRegionWillChange];
+    _mbglMap->setGestureInProgress(true);
+    _changeDelimiterSuppressionDepth++;
+}
+
+- (void)notifyGestureDidEndWithDrift:(BOOL)drift {
+    _changeDelimiterSuppressionDepth--;
+    NSAssert(_changeDelimiterSuppressionDepth >= 0,
+             @"Unbalanced change delimiter suppression/unsuppression");
+    if (_changeDelimiterSuppressionDepth == 0) {
+        _mbglMap->setGestureInProgress(false);
+    }
+    if ( ! drift)
+    {
+        [self notifyMapChange:mbgl::MapChangeRegionDidChange];
+    }
+}
+
+- (BOOL)isSuppressingChangeDelimiters {
+    return _changeDelimiterSuppressionDepth > 0;
 }
 
 - (void)handlePanGesture:(UIPanGestureRecognizer *)pan
@@ -872,11 +848,11 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
     {
         [self trackGestureEvent:MGLEventGesturePanStart forRecognizer:pan];
 
-        _mbglMap->setGestureInProgress(true);
-
         self.centerPoint = CGPointMake(0, 0);
 
         self.userTrackingMode = MGLUserTrackingModeNone;
+        
+        [self notifyGestureDidBegin];
     }
     else if (pan.state == UIGestureRecognizerStateChanged)
     {
@@ -885,10 +861,10 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
 
         double flippedY = self.bounds.size.height - [pan locationInView:pan.view].y;
         _mbglMap->setLatLng(
-            _mbglMap->latLngForPixel(mbgl::vec2<double>(
+            _mbglMap->latLngForPixel(mbgl::PrecisionPoint(
                 [pan locationInView:pan.view].x - delta.x,
                 flippedY + delta.y)),
-            mbgl::vec2<double>(
+            mbgl::PrecisionPoint(
                 [pan locationInView:pan.view].x,
                 flippedY));
 
@@ -906,31 +882,14 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
         }
 
         CGFloat duration = UIScrollViewDecelerationRateNormal;
-        if ( ! CGPointEqualToPoint(velocity, CGPointZero))
+        BOOL drift = ! CGPointEqualToPoint(velocity, CGPointZero);
+        if (drift)
         {
             CGPoint offset = CGPointMake(velocity.x * duration / 4, velocity.y * duration / 4);
-            _mbglMap->moveBy(offset.x, offset.y, secondsAsDuration(duration));
+            _mbglMap->moveBy({ offset.x, offset.y }, durationInSeconds(duration));
         }
 
-        _mbglMap->setGestureInProgress(false);
-
-        if ( ! CGPointEqualToPoint(velocity, CGPointZero))
-        {
-            self.animatingGesture = YES;
-
-            __weak MGLMapView *weakSelf = self;
-
-            [self animateWithDelay:duration animations:^
-            {
-                weakSelf.animatingGesture = NO;
-
-                [weakSelf notifyMapChange:mbgl::MapChangeRegionDidChangeAnimated];
-            }];
-        }
-        else
-        {
-            [self notifyMapChange:mbgl::MapChangeRegionDidChange];
-        }
+        [self notifyGestureDidEndWithDrift:drift];
 
         // metrics: pan end
         CGPoint pointInView = CGPointMake([pan locationInView:pan.view].x, [pan locationInView:pan.view].y);
@@ -957,11 +916,11 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
     {
         [self trackGestureEvent:MGLEventGesturePinchStart forRecognizer:pinch];
 
-        _mbglMap->setGestureInProgress(true);
-
         self.scale = _mbglMap->getScale();
 
         self.userTrackingMode = MGLUserTrackingModeNone;
+        
+        [self notifyGestureDidBegin];
     }
     else if (pinch.state == UIGestureRecognizerStateChanged)
     {
@@ -969,7 +928,9 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
 
         if (log2(newScale) < _mbglMap->getMinZoom()) return;
 
-        _mbglMap->setScale(newScale, [pinch locationInView:pinch.view].x, [pinch locationInView:pinch.view].y);
+        mbgl::PrecisionPoint center([pinch locationInView:pinch.view].x,
+                                    [pinch locationInView:pinch.view].y);
+        _mbglMap->setScale(newScale, center);
 
         [self notifyMapChange:mbgl::MapChangeRegionIsChanging];
     }
@@ -1006,30 +967,13 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
         if (velocity)
         {
             CGPoint pinchCenter = [pinch locationInView:pinch.view];
-            _mbglMap->setScale(newScale, pinchCenter.x, pinchCenter.y, secondsAsDuration(duration));
+            mbgl::PrecisionPoint center(pinchCenter.x, pinchCenter.y);
+            _mbglMap->setScale(newScale, center, durationInSeconds(duration));
         }
 
-        _mbglMap->setGestureInProgress(false);
+        [self notifyGestureDidEndWithDrift:velocity];
 
         [self unrotateIfNeededAnimated:YES];
-
-        if (velocity)
-        {
-            self.animatingGesture = YES;
-
-            __weak MGLMapView *weakSelf = self;
-
-            [self animateWithDelay:duration animations:^
-            {
-                weakSelf.animatingGesture = NO;
-
-                [weakSelf notifyMapChange:mbgl::MapChangeRegionDidChangeAnimated];
-            }];
-        }
-        else
-        {
-            [self notifyMapChange:mbgl::MapChangeRegionDidChange];
-        }
     }
 }
 
@@ -1043,11 +987,11 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
     {
         [self trackGestureEvent:MGLEventGestureRotateStart forRecognizer:rotate];
 
-        _mbglMap->setGestureInProgress(true);
-
         self.angle = MGLRadiansFromDegrees(_mbglMap->getBearing()) * -1;
 
         self.userTrackingMode = MGLUserTrackingModeNone;
+        
+        [self notifyGestureDidBegin];
     }
     else if (rotate.state == UIGestureRecognizerStateChanged)
     {
@@ -1061,9 +1005,9 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
             newDegrees = fmaxf(newDegrees, -30);
         }
 
-        _mbglMap->setBearing(newDegrees,
-                            [rotate locationInView:rotate.view].x,
-                            self.bounds.size.height - [rotate locationInView:rotate.view].y);
+        mbgl::PrecisionPoint center([rotate locationInView:rotate.view].x,
+                                    self.bounds.size.height - [rotate locationInView:rotate.view].y);
+        _mbglMap->setBearing(newDegrees, center);
 
         [self notifyMapChange:mbgl::MapChangeRegionIsChanging];
     }
@@ -1078,30 +1022,22 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
             CGFloat newRadians = radians + velocity * duration * 0.1;
             CGFloat newDegrees = MGLDegreesFromRadians(newRadians) * -1;
 
-            _mbglMap->setBearing(newDegrees, secondsAsDuration(duration));
+            _mbglMap->setBearing(newDegrees, durationInSeconds(duration));
 
-            _mbglMap->setGestureInProgress(false);
-
-            self.animatingGesture = YES;
+            [self notifyGestureDidEndWithDrift:YES];
 
             __weak MGLMapView *weakSelf = self;
 
             [self animateWithDelay:duration animations:^
              {
-                 weakSelf.animatingGesture = NO;
-
                  [weakSelf unrotateIfNeededAnimated:YES];
-
-                 [weakSelf notifyMapChange:mbgl::MapChangeRegionDidChangeAnimated];
              }];
         }
         else
         {
-            _mbglMap->setGestureInProgress(false);
+            [self notifyGestureDidEndWithDrift:NO];
 
             [self unrotateIfNeededAnimated:YES];
-
-            [self notifyMapChange:mbgl::MapChangeRegionDidChange];
         }
     }
 }
@@ -1138,7 +1074,7 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
 
         // figure out what that means in coordinate space
         CLLocationCoordinate2D coordinate;
-        mbgl::LatLngBounds tapBounds;
+        mbgl::LatLngBounds tapBounds = mbgl::LatLngBounds::getExtendable();
 
         coordinate = [self convertPoint:tapRectLowerLeft  toCoordinateFromView:self];
         tapBounds.extend(MGLLatLngFromLocationCoordinate2D(coordinate));
@@ -1295,19 +1231,14 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
             self.userTrackingMode = MGLUserTrackingModeNone;
         }
 
-        _mbglMap->scaleBy(2, zoomInPoint.x, zoomInPoint.y, secondsAsDuration(MGLAnimationDuration));
-
-        self.animatingGesture = YES;
+        mbgl::PrecisionPoint center(zoomInPoint.x, zoomInPoint.y);
+        _mbglMap->scaleBy(2, center, durationInSeconds(MGLAnimationDuration));
 
         __weak MGLMapView *weakSelf = self;
 
         [self animateWithDelay:MGLAnimationDuration animations:^
         {
-            weakSelf.animatingGesture = NO;
-
             [weakSelf unrotateIfNeededAnimated:YES];
-
-            [weakSelf notifyMapChange:mbgl::MapChangeRegionDidChangeAnimated];
         }];
     }
 }
@@ -1339,19 +1270,14 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
             zoomOutPoint = CGPointMake([twoFingerTap locationInView:twoFingerTap.view].x, [twoFingerTap locationInView:twoFingerTap.view].y);
         }
 
-        _mbglMap->scaleBy(0.5, zoomOutPoint.x, zoomOutPoint.y, secondsAsDuration(MGLAnimationDuration));
-
-        self.animatingGesture = YES;
+        mbgl::PrecisionPoint center(zoomOutPoint.x, zoomOutPoint.y);
+        _mbglMap->scaleBy(0.5, center, durationInSeconds(MGLAnimationDuration));
 
         __weak MGLMapView *weakSelf = self;
 
         [self animateWithDelay:MGLAnimationDuration animations:^
         {
-            weakSelf.animatingGesture = NO;
-
             [weakSelf unrotateIfNeededAnimated:YES];
-
-            [weakSelf notifyMapChange:mbgl::MapChangeRegionDidChangeAnimated];
         }];
     }
 }
@@ -1369,6 +1295,8 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
         self.scale = _mbglMap->getScale();
 
         self.quickZoomStart = [quickZoom locationInView:quickZoom.view].y;
+        
+        [self notifyGestureDidBegin];
     }
     else if (quickZoom.state == UIGestureRecognizerStateChanged)
     {
@@ -1378,15 +1306,15 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
 
         if (newZoom < _mbglMap->getMinZoom()) return;
 
-        _mbglMap->scaleBy(powf(2, newZoom) / _mbglMap->getScale(), self.bounds.size.width / 2, self.bounds.size.height / 2);
+        mbgl::PrecisionPoint center(self.bounds.size.width / 2, self.bounds.size.height / 2);
+        _mbglMap->scaleBy(powf(2, newZoom) / _mbglMap->getScale(), center);
 
         [self notifyMapChange:mbgl::MapChangeRegionIsChanging];
     }
     else if (quickZoom.state == UIGestureRecognizerStateEnded || quickZoom.state == UIGestureRecognizerStateCancelled)
     {
+        [self notifyGestureDidEndWithDrift:NO];
         [self unrotateIfNeededAnimated:YES];
-
-        [self notifyMapChange:mbgl::MapChangeRegionDidChange];
     }
 }
 
@@ -1399,6 +1327,7 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
     if (twoFingerDrag.state == UIGestureRecognizerStateBegan)
     {
         [self trackGestureEvent:MGLEventGesturePitchStart forRecognizer:twoFingerDrag];
+        [self notifyGestureDidBegin];
     }
     else if (twoFingerDrag.state == UIGestureRecognizerStateBegan || twoFingerDrag.state == UIGestureRecognizerStateChanged)
     {
@@ -1414,9 +1343,8 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
     }
     else if (twoFingerDrag.state == UIGestureRecognizerStateEnded || twoFingerDrag.state == UIGestureRecognizerStateCancelled)
     {
+        [self notifyGestureDidEndWithDrift:NO];
         [self unrotateIfNeededAnimated:YES];
-
-        [self notifyMapChange:mbgl::MapChangeRegionDidChange];
     }
 
 }
@@ -1575,13 +1503,15 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
 
 - (void)setDebugActive:(BOOL)debugActive
 {
-    _mbglMap->setDebug(debugActive);
-    _mbglMap->setCollisionDebug(debugActive);
+    _mbglMap->setDebug(debugActive ? mbgl::MapDebugOptions::TileBorders
+                                   | mbgl::MapDebugOptions::ParseStatus
+                                   | mbgl::MapDebugOptions::Collision
+                                   : mbgl::MapDebugOptions::NoDebug);
 }
 
 - (BOOL)isDebugActive
 {
-    return (_mbglMap->getDebug() || _mbglMap->getCollisionDebug());
+    return (_mbglMap->getDebug() != mbgl::MapDebugOptions::NoDebug);
 }
 
 - (void)resetNorth
@@ -1591,22 +1521,18 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
 
 - (void)resetNorthAnimated:(BOOL)animated
 {
-    CGFloat duration = (animated ? MGLAnimationDuration : 0);
-
-    _mbglMap->setBearing(0, secondsAsDuration(duration));
+    [self setDirection:0 animated:animated];
 }
 
 - (void)resetPosition
 {
+    _mbglMap->cancelTransitions();
     _mbglMap->resetPosition();
-
-    [self notifyMapChange:mbgl::MapChangeRegionDidChange];
 }
 
-- (void)toggleDebug
+- (void)cycleDebugOptions
 {
-    _mbglMap->toggleDebug();
-    _mbglMap->toggleCollisionDebug();
+    _mbglMap->cycleDebugOptions();
 }
 
 - (void)emptyMemoryCache
@@ -1641,15 +1567,21 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
     [self setCenterCoordinate:centerCoordinate zoomLevel:zoomLevel direction:self.direction animated:animated];
 }
 
-- (void)setCenterCoordinate:(CLLocationCoordinate2D)centerCoordinate zoomLevel:(double)zoomLevel direction:(CLLocationDirection)direction animated:(BOOL)animated
+- (void)setCenterCoordinate:(CLLocationCoordinate2D)centerCoordinate zoomLevel:(double)zoomLevel direction:(CLLocationDirection)direction animated:(BOOL)animated {
+    [self setCenterCoordinate:centerCoordinate zoomLevel:zoomLevel direction:direction animated:animated completionHandler:NULL];
+}
+
+- (void)setCenterCoordinate:(CLLocationCoordinate2D)centerCoordinate zoomLevel:(double)zoomLevel direction:(CLLocationDirection)direction animated:(BOOL)animated completionHandler:(nullable void (^)(void))completion
 {
     self.userTrackingMode = MGLUserTrackingModeNone;
 
-    [self _setCenterCoordinate:centerCoordinate zoomLevel:zoomLevel direction:direction animated:animated];
+    [self _setCenterCoordinate:centerCoordinate zoomLevel:zoomLevel direction:direction animated:animated completionHandler:completion];
 }
 
-- (void)_setCenterCoordinate:(CLLocationCoordinate2D)centerCoordinate zoomLevel:(double)zoomLevel direction:(CLLocationDirection)direction animated:(BOOL)animated
+- (void)_setCenterCoordinate:(CLLocationCoordinate2D)centerCoordinate zoomLevel:(double)zoomLevel direction:(CLLocationDirection)direction animated:(BOOL)animated completionHandler:(nullable void (^)(void))completion
 {
+    _mbglMap->cancelTransitions();
+    
     NSTimeInterval duration = animated ? MGLAnimationDuration : 0;
     mbgl::CameraOptions options;
     options.center = MGLLatLngFromLocationCoordinate2D(centerCoordinate);
@@ -1660,25 +1592,23 @@ std::chrono::steady_clock::duration secondsAsDuration(float duration)
     }
     if (animated)
     {
-        options.duration = secondsAsDuration(duration);
+        options.duration = durationInSeconds(duration);
         options.easing = MGLUnitBezierForMediaTimingFunction(nil);
+    }
+    if (completion)
+    {
+        options.transitionFinishFn = [completion]() {
+            // Must run asynchronously after the transition is completely over.
+            // Otherwise, a call to -setCenterCoordinate: within the completion
+            // handler would reenter the completion handler’s caller.
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                completion();
+            });
+        };
     }
     _mbglMap->easeTo(options);
 
     [self unrotateIfNeededAnimated:animated];
-
-    if (animated)
-    {
-        __weak MGLMapView *weakSelf = self;
-        [self animateWithDelay:duration animations:^
-         {
-             [weakSelf notifyMapChange:mbgl::MapChangeRegionDidChangeAnimated];
-         }];
-    }
-    else
-    {
-        [self notifyMapChange:mbgl::MapChangeRegionDidChange];
-    }
 }
 
 + (NS_SET_OF(NSString *) *)keyPathsForValuesAffectingZoomLevel
@@ -1766,8 +1696,14 @@ mbgl::LatLngBounds MGLLatLngBoundsFromCoordinateBounds(MGLCoordinateBounds coord
     [self setVisibleCoordinates:coordinates count:count edgePadding:insets direction:direction duration:animated ? MGLAnimationDuration : 0 animationTimingFunction:nil];
 }
 
-- (void)setVisibleCoordinates:(CLLocationCoordinate2D *)coordinates count:(NSUInteger)count edgePadding:(UIEdgeInsets)insets direction:(CLLocationDirection)direction duration:(NSTimeInterval)duration animationTimingFunction:(CAMediaTimingFunction *)function
+- (void)setVisibleCoordinates:(CLLocationCoordinate2D *)coordinates count:(NSUInteger)count edgePadding:(UIEdgeInsets)insets direction:(CLLocationDirection)direction duration:(NSTimeInterval)duration animationTimingFunction:(nullable CAMediaTimingFunction *)function {
+    [self setVisibleCoordinates:coordinates count:count edgePadding:insets direction:direction duration:duration animationTimingFunction:function completionHandler:NULL];
+}
+
+- (void)setVisibleCoordinates:(CLLocationCoordinate2D *)coordinates count:(NSUInteger)count edgePadding:(UIEdgeInsets)insets direction:(CLLocationDirection)direction duration:(NSTimeInterval)duration animationTimingFunction:(nullable CAMediaTimingFunction *)function completionHandler:(nullable void (^)(void))completion
 {
+    _mbglMap->cancelTransitions();
+    
     // NOTE: does not disrupt tracking mode
     [self willChangeValueForKey:@"visibleCoordinateBounds"];
     mbgl::EdgeInsets mbglInsets = {insets.top, insets.left, insets.bottom, insets.right};
@@ -1784,26 +1720,21 @@ mbgl::LatLngBounds MGLLatLngBoundsFromCoordinateBounds(MGLCoordinateBounds coord
     }
     if (duration > 0)
     {
-        options.duration = secondsAsDuration(duration);
+        options.duration = durationInSeconds(duration);
         options.easing = MGLUnitBezierForMediaTimingFunction(function);
+    }
+    if (completion)
+    {
+        options.transitionFinishFn = [completion]() {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                completion();
+            });
+        };
     }
     _mbglMap->easeTo(options);
     [self didChangeValueForKey:@"visibleCoordinateBounds"];
 
     [self unrotateIfNeededAnimated:duration > 0];
-
-    if (duration > 0)
-    {
-        __weak MGLMapView *weakSelf = self;
-        [self animateWithDelay:duration animations:^
-         {
-             [weakSelf notifyMapChange:mbgl::MapChangeRegionDidChangeAnimated];
-         }];
-    }
-    else
-    {
-        [self notifyMapChange:mbgl::MapChangeRegionDidChange];
-    }
 }
 
 + (NS_SET_OF(NSString *) *)keyPathsForValuesAffectingDirection
@@ -1820,27 +1751,23 @@ mbgl::LatLngBounds MGLLatLngBoundsFromCoordinateBounds(MGLCoordinateBounds coord
 {
     if ( ! animated && ! self.rotationAllowed) return;
 
-    if (self.userTrackingMode == MGLUserTrackingModeFollowWithHeading)
+    if (self.userTrackingMode == MGLUserTrackingModeFollowWithHeading ||
+        self.userTrackingMode == MGLUserTrackingModeFollowWithCourse)
     {
         self.userTrackingMode = MGLUserTrackingModeFollow;
     }
-
-    CGFloat duration = (animated ? MGLAnimationDuration : 0);
-
-    _mbglMap->setBearing(direction, secondsAsDuration(duration));
     
-    if (animated)
-    {
-        __weak MGLMapView *weakSelf = self;
-        [self animateWithDelay:duration animations:^
-         {
-             [weakSelf notifyMapChange:mbgl::MapChangeRegionDidChangeAnimated];
-         }];
-    }
-    else
-    {
-        [self notifyMapChange:mbgl::MapChangeRegionDidChange];
-    }
+    [self _setDirection:direction animated:animated];
+}
+
+- (void)_setDirection:(CLLocationDirection)direction animated:(BOOL)animated
+{
+    if (direction == self.direction) return;
+    _mbglMap->cancelTransitions();
+
+    CGFloat duration = animated ? MGLAnimationDuration : 0;
+
+    _mbglMap->setBearing(direction, durationInSeconds(duration));
 }
 
 - (void)setDirection:(CLLocationDirection)direction
@@ -1917,8 +1844,15 @@ mbgl::LatLngBounds MGLLatLngBoundsFromCoordinateBounds(MGLCoordinateBounds coord
     [self setCamera:camera withDuration:animated ? MGLAnimationDuration : 0 animationTimingFunction:nil];
 }
 
-- (void)setCamera:(MGLMapCamera *)camera withDuration:(NSTimeInterval)duration animationTimingFunction:(CAMediaTimingFunction *)function
+- (void)setCamera:(MGLMapCamera *)camera withDuration:(NSTimeInterval)duration animationTimingFunction:(nullable CAMediaTimingFunction *)function
 {
+    [self setCamera:camera withDuration:duration animationTimingFunction:function completionHandler:NULL];
+}
+
+- (void)setCamera:(MGLMapCamera *)camera withDuration:(NSTimeInterval)duration animationTimingFunction:(nullable CAMediaTimingFunction *)function completionHandler:(nullable void (^)(void))completion
+{
+    _mbglMap->cancelTransitions();
+    
     // The opposite side is the distance between the center and one edge.
     mbgl::LatLng centerLatLng = MGLLatLngFromLocationCoordinate2D(camera.centerCoordinate);
     mbgl::ProjectedMeters centerMeters = _mbglMap->projectedMetersForLatLng(centerLatLng);
@@ -1977,23 +1911,18 @@ mbgl::LatLngBounds MGLLatLngBoundsFromCoordinateBounds(MGLCoordinateBounds coord
     }
     if (duration > 0)
     {
-        options.duration = secondsAsDuration(duration);
+        options.duration = durationInSeconds(duration);
         options.easing = MGLUnitBezierForMediaTimingFunction(function);
     }
+    if (completion)
+    {
+        options.transitionFinishFn = [completion]() {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                completion();
+            });
+        };
+    }
     _mbglMap->easeTo(options);
-    
-    if (duration > 0)
-    {
-        __weak MGLMapView *weakSelf = self;
-        [self animateWithDelay:duration animations:^
-         {
-             [weakSelf notifyMapChange:mbgl::MapChangeRegionDidChangeAnimated];
-         }];
-    }
-    else
-    {
-        [self notifyMapChange:mbgl::MapChangeRegionDidChange];
-    }
 }
 
 - (CLLocationCoordinate2D)convertPoint:(CGPoint)point toCoordinateFromView:(nullable UIView *)view
@@ -2004,7 +1933,7 @@ mbgl::LatLngBounds MGLLatLngBoundsFromCoordinateBounds(MGLCoordinateBounds coord
     //
     convertedPoint.y = self.bounds.size.height - convertedPoint.y;
 
-    return MGLLocationCoordinate2DFromLatLng(_mbglMap->latLngForPixel(mbgl::vec2<double>(convertedPoint.x, convertedPoint.y)));
+    return MGLLocationCoordinate2DFromLatLng(_mbglMap->latLngForPixel(mbgl::PrecisionPoint(convertedPoint.x, convertedPoint.y)));
 }
 
 - (CGPoint)convertCoordinate:(CLLocationCoordinate2D)coordinate toPointToView:(nullable UIView *)view
@@ -2035,7 +1964,7 @@ CLLocationCoordinate2D MGLLocationCoordinate2DFromLatLng(mbgl::LatLng latLng)
 
 - (mbgl::LatLngBounds)viewportBounds
 {
-    mbgl::LatLngBounds bounds;
+    mbgl::LatLngBounds bounds = mbgl::LatLngBounds::getExtendable();
 
     bounds.extend(MGLLatLngFromLocationCoordinate2D(
         [self convertPoint:CGPointMake(0, 0) toCoordinateFromView:self]));
@@ -2111,7 +2040,7 @@ CLLocationCoordinate2D MGLLocationCoordinate2DFromLatLng(mbgl::LatLng latLng)
         newAppliedClasses.insert(newAppliedClasses.end(), [appliedClass UTF8String]);
     }
 
-    _mbglMap->setDefaultTransitionDuration(secondsAsDuration(transitionDuration));
+    _mbglMap->setDefaultTransitionDuration(durationInSeconds(transitionDuration));
     _mbglMap->setClasses(newAppliedClasses);
 }
 
@@ -2213,11 +2142,11 @@ CLLocationCoordinate2D MGLLocationCoordinate2DFromLatLng(mbgl::LatLng latLng)
                                 [self.delegate mapView:self lineWidthForPolylineAnnotation:(MGLPolyline *)annotation] :
                                 3.0);
 
-                mbgl::LinePaintProperties lineProperties;
+                mbgl::LineAnnotationProperties lineProperties;
                 lineProperties.opacity = alpha;
                 lineProperties.color = strokeNativeColor;
                 lineProperties.width = lineWidth;
-                shapeProperties.set<mbgl::LinePaintProperties>(lineProperties);
+                shapeProperties.set<mbgl::LineAnnotationProperties>(lineProperties);
 
             }
             else if ([annotation isKindOfClass:[MGLPolygon class]])
@@ -2231,11 +2160,11 @@ CLLocationCoordinate2D MGLLocationCoordinate2DFromLatLng(mbgl::LatLng latLng)
                 [fillColor getRed:&r green:&g blue:&b alpha:&a];
                 mbgl::Color fillNativeColor({{ (float)r, (float)g, (float)b, (float)a }});
 
-                mbgl::FillPaintProperties fillProperties;
+                mbgl::FillAnnotationProperties fillProperties;
                 fillProperties.opacity = alpha;
-                fillProperties.stroke_color = strokeNativeColor;
-                fillProperties.fill_color = fillNativeColor;
-                shapeProperties.set<mbgl::FillPaintProperties>(fillProperties);
+                fillProperties.outlineColor = strokeNativeColor;
+                fillProperties.color = fillNativeColor;
+                shapeProperties.set<mbgl::FillAnnotationProperties>(fillProperties);
             }
             else
             {
@@ -2555,7 +2484,7 @@ CLLocationCoordinate2D MGLLocationCoordinate2DFromLatLng(mbgl::LatLng latLng)
 {
     if ( ! annotations || ! annotations.count) return;
 
-    mbgl::LatLngBounds bounds;
+    mbgl::LatLngBounds bounds = mbgl::LatLngBounds::getExtendable();
 
     for (id <MGLAnnotation> annotation in annotations)
     {
@@ -2788,7 +2717,7 @@ CLLocationCoordinate2D MGLLocationCoordinate2DFromLatLng(mbgl::LatLng latLng)
             {
                 // at sufficient detail, just re-center the map; don't zoom
                 //
-                [self _setCenterCoordinate:self.userLocation.location.coordinate zoomLevel:self.zoomLevel direction:course animated:YES];
+                [self _setCenterCoordinate:self.userLocation.location.coordinate zoomLevel:self.zoomLevel direction:course animated:YES completionHandler:NULL];
             }
             else
             {
@@ -2856,7 +2785,7 @@ CLLocationCoordinate2D MGLLocationCoordinate2DFromLatLng(mbgl::LatLng latLng)
 
     if (headingDirection >= 0 && self.userTrackingMode == MGLUserTrackingModeFollowWithHeading)
     {
-        _mbglMap->setBearing(headingDirection, secondsAsDuration(MGLAnimationDuration));
+        [self _setDirection:headingDirection animated:YES];
     }
 }
 
@@ -2938,8 +2867,6 @@ CLLocationCoordinate2D MGLLocationCoordinate2DFromLatLng(mbgl::LatLng latLng)
     {
         if (animated)
         {
-            self.animatingGesture = YES;
-
             self.userInteractionEnabled = NO;
 
             __weak MGLMapView *weakSelf = self;
@@ -2951,8 +2878,6 @@ CLLocationCoordinate2D MGLLocationCoordinate2DFromLatLng(mbgl::LatLng latLng)
                 [self animateWithDelay:MGLAnimationDuration animations:^
                 {
                     weakSelf.userInteractionEnabled = YES;
-
-                    self.animatingGesture = NO;
                 }];
 
             }];
@@ -2961,14 +2886,6 @@ CLLocationCoordinate2D MGLLocationCoordinate2DFromLatLng(mbgl::LatLng latLng)
         {
             [self resetNorthAnimated:NO];
         }
-    }
-}
-
-- (void)unsuspendRegionChangeDelegateQueue
-{
-    @synchronized (self.regionChangeDelegateQueue)
-    {
-        [self.regionChangeDelegateQueue setSuspended:NO];
     }
 }
 
@@ -2986,33 +2903,10 @@ CLLocationCoordinate2D MGLLocationCoordinate2DFromLatLng(mbgl::LatLng latLng)
         {
             [self deselectAnnotation:self.selectedAnnotation animated:NO];
 
-            BOOL animated = (change == mbgl::MapChangeRegionWillChangeAnimated);
-
-            @synchronized (self.regionChangeDelegateQueue)
+            if ( ! [self isSuppressingChangeDelimiters] && [self.delegate respondsToSelector:@selector(mapView:regionWillChangeAnimated:)])
             {
-                if ([self.regionChangeDelegateQueue operationCount] == 0)
-                {
-                    if ([self.delegate respondsToSelector:@selector(mapView:regionWillChangeAnimated:)])
-                    {
-                        [self.delegate mapView:self regionWillChangeAnimated:animated];
-                    }
-                }
-
-                [self.regionChangeDelegateQueue setSuspended:YES];
-
-                if ([self.regionChangeDelegateQueue operationCount] == 0)
-                {
-                    [self.regionChangeDelegateQueue addOperationWithBlock:^
-                    {
-                        dispatch_async(dispatch_get_main_queue(), ^
-                        {
-                            if ([self.delegate respondsToSelector:@selector(mapView:regionDidChangeAnimated:)])
-                            {
-                                [self.delegate mapView:self regionDidChangeAnimated:animated];
-                            }
-                        });
-                    }];
-                }
+                BOOL animated = change == mbgl::MapChangeRegionWillChangeAnimated;
+                [self.delegate mapView:self regionWillChangeAnimated:animated];
             }
             break;
         }
@@ -3031,17 +2925,11 @@ CLLocationCoordinate2D MGLLocationCoordinate2DFromLatLng(mbgl::LatLng latLng)
         {
             [self updateCompass];
 
-            if (self.pan.state           == UIGestureRecognizerStateChanged ||
-                self.pinch.state         == UIGestureRecognizerStateChanged ||
-                self.rotate.state        == UIGestureRecognizerStateChanged ||
-                self.quickZoom.state     == UIGestureRecognizerStateChanged ||
-                self.twoFingerDrag.state == UIGestureRecognizerStateChanged) return;
-
-            if (self.isAnimatingGesture) return;
-
-            [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(unsuspendRegionChangeDelegateQueue) object:nil];
-            [self performSelector:@selector(unsuspendRegionChangeDelegateQueue) withObject:nil afterDelay:0];
-
+            if ( ! [self isSuppressingChangeDelimiters] && [self.delegate respondsToSelector:@selector(mapView:regionDidChangeAnimated:)])
+            {
+                BOOL animated = change == mbgl::MapChangeRegionDidChangeAnimated;
+                [self.delegate mapView:self regionDidChangeAnimated:animated];
+            }
             break;
         }
         case mbgl::MapChangeWillStartLoadingMap:

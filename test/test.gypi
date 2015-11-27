@@ -39,11 +39,6 @@
 
         'miscellaneous/assert.cpp',
 
-        'annotations/sprite_atlas.cpp',
-        'annotations/sprite_image.cpp',
-        'annotations/sprite_store.cpp',
-        'annotations/sprite_parser.cpp',
-
         'api/annotations.cpp',
         'api/api_misuse.cpp',
         'api/repeated_render.cpp',
@@ -54,10 +49,10 @@
         'miscellaneous/binpack.cpp',
         'miscellaneous/bilinear.cpp',
         'miscellaneous/comparisons.cpp',
-        'miscellaneous/custom_sprites.cpp',
         'miscellaneous/enums.cpp',
         'miscellaneous/functions.cpp',
         'miscellaneous/geo.cpp',
+        'miscellaneous/image.cpp',
         'miscellaneous/map.cpp',
         'miscellaneous/map_context.cpp',
         'miscellaneous/mapbox.cpp',
@@ -66,6 +61,7 @@
         'miscellaneous/text_conversions.cpp',
         'miscellaneous/thread.cpp',
         'miscellaneous/tile.cpp',
+        'miscellaneous/token.cpp',
         'miscellaneous/transform.cpp',
         'miscellaneous/work_queue.cpp',
         'miscellaneous/variant.cpp',
@@ -77,6 +73,7 @@
         'storage/database.cpp',
         'storage/directory_reading.cpp',
         'storage/file_reading.cpp',
+        'storage/headers.cpp',
         'storage/http_cancel.cpp',
         'storage/http_coalescing.cpp',
         'storage/http_error.cpp',
@@ -91,7 +88,11 @@
         'style/glyph_store.cpp',
         'style/pending_resources.cpp',
         'style/resource_loading.cpp',
-        'style/sprite.cpp',
+
+        'sprite/sprite_atlas.cpp',
+        'sprite/sprite_image.cpp',
+        'sprite/sprite_parser.cpp',
+        'sprite/sprite_store.cpp',
       ],
       'libraries': [
         '<@(gtest_static_libs)',
@@ -109,6 +110,7 @@
           '<@(geojsonvt_cflags)',
           '<@(variant_cflags)',
           '<@(rapidjson_cflags)',
+          '<@(pixelmatch_cflags)',
         ],
         'ldflags': [
           '<@(gtest_ldflags)',

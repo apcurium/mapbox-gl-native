@@ -14,6 +14,7 @@
 
 namespace mbgl {
 
+class MapData;
 class StyleLayer;
 class Source;
 
@@ -21,6 +22,8 @@ using JSVal = rapidjson::Value;
 
 class StyleParser {
 public:
+    StyleParser(MapData&);
+
     void parse(const JSVal&);
 
     std::vector<std::unique_ptr<Source>>&& getSources() {
@@ -31,21 +34,21 @@ public:
         return layers;
     }
 
-    std::string getSprite() const {
-        return sprite;
+    std::string getSpriteURL() const {
+        return spriteURL;
     }
 
     std::string getGlyphURL() const {
-        return glyph_url;
+        return glyphURL;
     }
 
 private:
     void parseSources(const JSVal&);
     void parseLayers(const JSVal&);
     void parseLayer(const std::string& id, const JSVal&, util::ptr<StyleLayer>&);
-    void parseSprite(const JSVal&);
-    void parseGlyphURL(const JSVal&);
     void parseVisibility(StyleLayer&, const JSVal& value);
+
+    MapData& data;
 
     std::uint8_t version;
 
@@ -58,11 +61,8 @@ private:
     // Store a stack of layer IDs we're parsing right now. This is to prevent reference cycles.
     std::forward_list<std::string> stack;
 
-    // Base URL of the sprite image.
-    std::string sprite;
-
-    // URL template for glyph PBFs.
-    std::string glyph_url;
+    std::string spriteURL;
+    std::string glyphURL;
 };
 
 }

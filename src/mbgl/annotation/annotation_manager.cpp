@@ -1,5 +1,6 @@
 #include <mbgl/annotation/annotation_manager.hpp>
 #include <mbgl/annotation/annotation_tile.hpp>
+#include <mbgl/map/map_data.hpp>
 #include <mbgl/style/style.hpp>
 #include <mbgl/layer/symbol_layer.hpp>
 
@@ -10,7 +11,8 @@ namespace mbgl {
 const std::string AnnotationManager::SourceID = "com.mapbox.annotations";
 const std::string AnnotationManager::PointLayerID = "com.mapbox.annotations.points";
 
-AnnotationManager::AnnotationManager() = default;
+AnnotationManager::AnnotationManager(MapData& data_) : data(data_) {}
+
 AnnotationManager::~AnnotationManager() = default;
 
 AnnotationIDs
@@ -68,7 +70,7 @@ AnnotationIDs AnnotationManager::getPointAnnotationsInBounds(const LatLngBounds&
 }
 
 LatLngBounds AnnotationManager::getBoundsForAnnotations(const AnnotationIDs& ids) const {
-    LatLngBounds result;
+    LatLngBounds result = LatLngBounds::getExtendable();
 
     for (const auto& id : ids) {
         if (pointAnnotations.find(id) != pointAnnotations.end()) {
@@ -108,7 +110,7 @@ std::unique_ptr<AnnotationTile> AnnotationManager::getTile(const TileID& tileID)
 void AnnotationManager::updateStyle(Style& style) {
     // Create annotation source, point layer, and point bucket
     if (!style.getSource(SourceID)) {
-        std::unique_ptr<Source> source = std::make_unique<Source>();
+        std::unique_ptr<Source> source = std::make_unique<Source>(data);
         source->info.type = SourceType::Annotations;
         source->info.source_id = SourceID;
         source->enabled = true;
@@ -120,8 +122,8 @@ void AnnotationManager::updateStyle(Style& style) {
 
         layer->source = SourceID;
         layer->sourceLayer = PointLayerID;
-        layer->layout.set(PropertyKey::IconImage, Function<std::string>("{sprite}"));
-        layer->layout.set(PropertyKey::IconAllowOverlap, Function<bool>(true));
+        layer->layout.icon.image = std::string("{sprite}");
+        layer->layout.icon.allowOverlap = true;
 
         style.addLayer(std::move(layer));
     }

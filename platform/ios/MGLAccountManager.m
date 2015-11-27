@@ -3,8 +3,8 @@
 #import "MGLCategoryLoader.h"
 #import "NSProcessInfo+MGLAdditions.h"
 
-#import <Fabric/FABKitProtocol.h>
-#import <Fabric/Fabric+FABKits.h>
+#import "FABKitProtocol.h"
+#import "Fabric+FABKits.h"
 
 @interface MGLAccountManager() <FABKit>
 
@@ -85,7 +85,7 @@
 }
 
 + (NSString *)kitDisplayVersion {
-    return @"3.0.0-pre.5";
+    return @"3.0.0-pre.7";
 }
 
 + (void)initializeIfNeeded {

@@ -1,6 +1,6 @@
 #include <mbgl/annotation/point_annotation.hpp>
 #include <mbgl/annotation/shape_annotation.hpp>
-#include <mbgl/annotation/sprite_image.hpp>
+#include <mbgl/sprite/sprite_image.hpp>
 #include <mbgl/platform/default/glfw_view.hpp>
 #include <mbgl/platform/gl.hpp>
 #include <mbgl/platform/log.hpp>
@@ -82,6 +82,30 @@ GLFWView::GLFWView(bool fullscreen_, bool benchmark_)
     pixelRatio = static_cast<float>(fbWidth) / width;
 
     glfwMakeContextCurrent(nullptr);
+
+    printf("\n");
+    printf("================================================================================\n");
+    printf("\n");
+    printf("- Press `S` to cycle through bundled styles\n");
+    printf("- Press `X` to reset the transform\n");
+    printf("- Press `N` to reset north\n");
+    printf("- Press `R` to toggle any available `night` style class\n");
+    printf("\n");
+    printf("- Press `1` through `6` to add increasing numbers of point annotations for testing\n");
+    printf("- Press `7` through `0` to add increasing numbers of shape annotations for testing\n");
+    printf("\n");
+    printf("- Press `Q` to remove annotations\n");
+    printf("- Press `P` to add a random custom runtime imagery annotation\n");
+    printf("- Press `W` to pop the last-added annotation off\n");
+    printf("\n");
+    printf("- `Control` + mouse drag to rotate\n");
+    printf("- `Shift` + mouse drag to tilt\n");
+    printf("\n");
+    printf("- Press `Tab` to cycle through the map debug options\n");
+    printf("- Press `Esc` to quit\n");
+    printf("\n");
+    printf("================================================================================\n");
+    printf("\n");
 }
 
 GLFWView::~GLFWView() {
@@ -102,10 +126,7 @@ void GLFWView::onKey(GLFWwindow *window, int key, int /*scancode*/, int action, 
             glfwSetWindowShouldClose(window, true);
             break;
         case GLFW_KEY_TAB:
-            view->map->toggleDebug();
-            break;
-        case GLFW_KEY_C:
-            view->map->toggleCollisionDebug();
+            view->map->cycleDebugOptions();
             break;
         case GLFW_KEY_X:
             if (!mods)
@@ -223,7 +244,7 @@ void GLFWView::addRandomPointAnnotations(int count) {
 void GLFWView::addRandomShapeAnnotations(int count) {
     std::vector<mbgl::ShapeAnnotation> shapes;
 
-    mbgl::FillPaintProperties properties;
+    mbgl::FillAnnotationProperties properties;
     properties.opacity = .1;
 
     for (int i = 0; i < count; i++) {
@@ -279,7 +300,7 @@ void GLFWView::onScroll(GLFWwindow *window, double /*xOffset*/, double yOffset) 
         scale = 1.0 / scale;
     }
 
-    view->map->scaleBy(scale, view->lastX, view->lastY);
+    view->map->scaleBy(scale, { view->lastX, view->lastY });
 }
 
 void GLFWView::onWindowResize(GLFWwindow *window, int width, int height) {
@@ -305,6 +326,9 @@ void GLFWView::onMouseClick(GLFWwindow *window, int button, int action, int modi
         (button == GLFW_MOUSE_BUTTON_LEFT && modifiers & GLFW_MOD_CONTROL)) {
         view->rotating = action == GLFW_PRESS;
         view->map->setGestureInProgress(view->rotating);
+    } else if (button == GLFW_MOUSE_BUTTON_LEFT && (modifiers & GLFW_MOD_SHIFT)) {
+        view->pitching = action == GLFW_PRESS;
+        view->map->setGestureInProgress(view->pitching);
     } else if (button == GLFW_MOUSE_BUTTON_LEFT) {
         view->tracking = action == GLFW_PRESS;
         view->map->setGestureInProgress(view->tracking);
@@ -313,9 +337,9 @@ void GLFWView::onMouseClick(GLFWwindow *window, int button, int action, int modi
             double now = glfwGetTime();
             if (now - view->lastClick < 0.4 /* ms */) {
                 if (modifiers & GLFW_MOD_SHIFT) {
-                    view->map->scaleBy(0.5, view->lastX, view->lastY, std::chrono::milliseconds(500));
+                    view->map->scaleBy(0.5, { view->lastX, view->lastY }, std::chrono::milliseconds(500));
                 } else {
-                    view->map->scaleBy(2.0, view->lastX, view->lastY, std::chrono::milliseconds(500));
+                    view->map->scaleBy(2.0, { view->lastX, view->lastY }, std::chrono::milliseconds(500));
                 }
             }
             view->lastClick = now;
@@ -331,11 +355,16 @@ void GLFWView::onMouseMove(GLFWwindow *window, double x, double y) {
         if (dx || dy) {
             double flippedY = view->height - y;
             view->map->setLatLng(
-                    view->map->latLngForPixel(mbgl::vec2<double>(x - dx, flippedY + dy)),
-                    mbgl::vec2<double>(x, flippedY));
+                    view->map->latLngForPixel(mbgl::PrecisionPoint(x - dx, flippedY + dy)),
+                    mbgl::PrecisionPoint(x, flippedY));
         }
     } else if (view->rotating) {
-        view->map->rotateBy(view->lastX, view->lastY, x, y);
+        view->map->rotateBy({ view->lastX, view->lastY }, { x, y });
+    } else if (view->pitching) {
+        const double dy = y - view->lastY;
+        if (dy) {
+            view->map->setPitch(view->map->getPitch() - dy / 2);
+        }
     }
     view->lastX = x;
     view->lastY = y;

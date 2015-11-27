@@ -21,13 +21,8 @@ class View;
 class MapData;
 class TexturePool;
 class Painter;
-class Sprite;
-class Worker;
-class StillImage;
 class SpriteImage;
-struct LatLng;
-struct LatLngBounds;
-
+class FileRequest;
 
 struct FrameData {
     std::array<uint16_t, 2> framebufferSize;
@@ -92,7 +87,7 @@ private:
     std::string styleURL;
     std::string styleJSON;
 
-    RequestHolder styleRequest;
+    std::unique_ptr<FileRequest> styleRequest;
 
     Map::StillImageCallback callback;
     size_t sourceCacheSize;

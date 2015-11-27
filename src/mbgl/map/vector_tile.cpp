@@ -4,7 +4,6 @@
 #include <mbgl/storage/response.hpp>
 #include <mbgl/storage/file_source.hpp>
 #include <mbgl/util/thread_context.hpp>
-#include <mbgl/util/run_loop.hpp>
 
 #include <sstream>
 
@@ -182,8 +181,8 @@ VectorTileMonitor::VectorTileMonitor(const SourceInfo& source, const TileID& id,
     : url(source.tileURL(id, pixelRatio)) {
 }
 
-Request* VectorTileMonitor::monitorTile(std::function<void (std::exception_ptr, std::unique_ptr<GeometryTile>)> callback) {
-    return util::ThreadContext::getFileSource()->request({ Resource::Kind::Tile, url }, util::RunLoop::getLoop(), [callback, this](const Response& res) {
+std::unique_ptr<FileRequest> VectorTileMonitor::monitorTile(const GeometryTileMonitor::Callback& callback) {
+    return util::ThreadContext::getFileSource()->request({ Resource::Kind::Tile, url }, [callback, this](Response res) {
         if (res.data && data == res.data) {
             // We got the same data again. Abort early.
             return;
@@ -191,18 +190,18 @@ Request* VectorTileMonitor::monitorTile(std::function<void (std::exception_ptr, 
 
         if (res.error) {
             if (res.error->reason == Response::Error::Reason::NotFound) {
-                callback(nullptr, nullptr);
+                callback(nullptr, nullptr, res.modified, res.expires);
                 return;
             } else {
                 std::stringstream message;
                 message << "Failed to load [" << url << "]: " << res.error->message;
-                callback(std::make_exception_ptr(std::runtime_error(message.str())), nullptr);
+                callback(std::make_exception_ptr(std::runtime_error(message.str())), nullptr, res.modified, res.expires);
                 return;
             }
         }
 
         data = res.data;
-        callback(nullptr, std::make_unique<VectorTile>(data));
+        callback(nullptr, std::make_unique<VectorTile>(data), res.modified, res.expires);
     });
 }
 

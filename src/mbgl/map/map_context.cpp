@@ -1,8 +1,6 @@
 #include <mbgl/map/map_context.hpp>
 #include <mbgl/map/map_data.hpp>
 #include <mbgl/map/view.hpp>
-#include <mbgl/map/still_image.hpp>
-#include <mbgl/annotation/sprite_store.hpp>
 
 #include <mbgl/platform/log.hpp>
 
@@ -12,9 +10,10 @@
 #include <mbgl/storage/resource.hpp>
 #include <mbgl/storage/response.hpp>
 
-#include <mbgl/geometry/sprite_atlas.hpp>
-
 #include <mbgl/style/style.hpp>
+
+#include <mbgl/sprite/sprite_atlas.hpp>
+#include <mbgl/sprite/sprite_store.hpp>
 
 #include <mbgl/util/gl_object_store.hpp>
 #include <mbgl/util/uv_detail.hpp>
@@ -97,9 +96,6 @@ void MapContext::setStyleURL(const std::string& url) {
     styleJSON.clear();
 
     style = std::make_unique<Style>(data);
-    if (painter) {
-        painter->updateRenderOrder(*style);
-    }
 
     const size_t pos = styleURL.rfind('/');
     std::string base = "";
@@ -108,7 +104,7 @@ void MapContext::setStyleURL(const std::string& url) {
     }
 
     FileSource* fs = util::ThreadContext::getFileSource();
-    styleRequest = fs->request({ Resource::Kind::Style, styleURL }, util::RunLoop::getLoop(), [this, base](const Response &res) {
+    styleRequest = fs->request({ Resource::Kind::Style, styleURL }, [this, base](Response res) {
         if (res.stale) {
             // Only handle fresh responses.
             return;
@@ -138,9 +134,6 @@ void MapContext::setStyleJSON(const std::string& json, const std::string& base) 
     styleJSON = json;
 
     style = std::make_unique<Style>(data);
-    if (painter) {
-        painter->updateRenderOrder(*style);
-    }
 
     loadStyleJSON(json, base);
 }
@@ -175,7 +168,7 @@ void MapContext::update() {
 
     data.setAnimationTime(Clock::now());
 
-    if (style->sprite && updateFlags & Update::Annotations) {
+    if (style->loaded && updateFlags & Update::Annotations) {
         data.getAnnotationManager()->updateStyle(*style);
         updateFlags |= Update::Classes;
     }
@@ -206,22 +199,22 @@ void MapContext::renderStill(const TransformState& state, const FrameData& frame
     }
 
     if (data.mode != MapMode::Still) {
-        fn(std::make_exception_ptr(util::MisuseException("Map is not in still image render mode")), nullptr);
+        fn(std::make_exception_ptr(util::MisuseException("Map is not in still image render mode")), {});
         return;
     }
 
     if (callback) {
-        fn(std::make_exception_ptr(util::MisuseException("Map is currently rendering an image")), nullptr);
+        fn(std::make_exception_ptr(util::MisuseException("Map is currently rendering an image")), {});
         return;
     }
 
     if (!style) {
-        fn(std::make_exception_ptr(util::MisuseException("Map doesn't have a style")), nullptr);
+        fn(std::make_exception_ptr(util::MisuseException("Map doesn't have a style")), {});
         return;
     }
 
     if (style->getLastError()) {
-        fn(style->getLastError(), nullptr);
+        fn(style->getLastError(), {});
         return;
     }
 
@@ -248,15 +241,11 @@ bool MapContext::renderSync(const TransformState& state, const FrameData& frame)
     // Cleanup OpenGL objects that we abandoned since the last render call.
     glObjectStore.performCleanup();
 
-    if (!painter) {
-        painter = std::make_unique<Painter>(data);
-        painter->updateRenderOrder(*style);
-    }
-
-    painter->render(*style, transformState, frame);
+    if (!painter) painter = std::make_unique<Painter>(data, transformState);
+    painter->render(*style, frame);
 
     if (data.mode == MapMode::Still) {
-        callback(nullptr, view.readStillImage());
+        callback(nullptr, std::move(view.readStillImage()));
         callback = nullptr;
     }
 
@@ -322,10 +311,6 @@ void MapContext::setSprite(const std::string& name, std::shared_ptr<const Sprite
 void MapContext::onTileDataChanged() {
     assert(util::ThreadContext::currentlyOn(util::ThreadType::Map));
 
-    if (painter) {
-        painter->updateRenderOrder(*style);
-    }
-
     updateFlags |= Update::Repaint;
     asyncUpdate->send();
 }
@@ -334,7 +319,7 @@ void MapContext::onResourceLoadingFailed(std::exception_ptr error) {
     assert(util::ThreadContext::currentlyOn(util::ThreadType::Map));
 
     if (data.mode == MapMode::Still && callback) {
-        callback(error, nullptr);
+        callback(error, {});
         callback = nullptr;
     }
 }

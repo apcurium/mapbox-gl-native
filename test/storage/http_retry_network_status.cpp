@@ -4,7 +4,8 @@
 
 #include <mbgl/storage/default_file_source.hpp>
 #include <mbgl/storage/network_status.hpp>
-
+#include <mbgl/util/chrono.hpp>
+#include <mbgl/util/run_loop.hpp>
 
 // Test for https://github.com/mapbox/mapbox-gl-native/issues/2123
 //
@@ -18,19 +19,21 @@ TEST_F(Storage, HTTPNetworkStatusChange) {
     using namespace mbgl;
 
     DefaultFileSource fs(nullptr);
+    util::RunLoop loop(uv_default_loop());
 
     const Resource resource { Resource::Unknown, "http://127.0.0.1:3000/delayed" };
 
     // This request takes 200 milliseconds to answer.
-    Request* req = fs.request(resource, uv_default_loop(), [&](const Response& res) {
-         fs.cancel(req);
+    std::unique_ptr<FileRequest> req = fs.request(resource, [&](Response res) {
+         req.reset();
          EXPECT_EQ(nullptr, res.error);
          EXPECT_EQ(false, res.stale);
          ASSERT_TRUE(res.data.get());
          EXPECT_EQ("Response", *res.data);
-         EXPECT_EQ(0, res.expires);
-         EXPECT_EQ(0, res.modified);
+         EXPECT_EQ(Seconds::zero(), res.expires);
+         EXPECT_EQ(Seconds::zero(), res.modified);
          EXPECT_EQ("", res.etag);
+         loop.stop();
          HTTPNetworkStatusChange.finish();
     });
 
@@ -56,11 +59,12 @@ TEST_F(Storage, HTTPNetworkStatusChangePreempt) {
     using namespace mbgl;
 
     DefaultFileSource fs(nullptr);
+    util::RunLoop loop(uv_default_loop());
 
     const auto start = uv_hrtime();
 
     const Resource resource{ Resource::Unknown, "http://127.0.0.1:3001/test" };
-    Request* req = fs.request(resource, uv_default_loop(), [&](const Response& res) {
+    std::unique_ptr<FileRequest> req = fs.request(resource, [&](Response res) {
         static int counter = 0;
         const auto duration = double(uv_hrtime() - start) / 1e9;
         if (counter == 0) {
@@ -86,12 +90,13 @@ TEST_F(Storage, HTTPNetworkStatusChangePreempt) {
 #endif
         EXPECT_EQ(false, res.stale);
         ASSERT_FALSE(res.data.get());
-        EXPECT_EQ(0, res.expires);
-        EXPECT_EQ(0, res.modified);
+        EXPECT_EQ(Seconds::zero(), res.expires);
+        EXPECT_EQ(Seconds::zero(), res.modified);
         EXPECT_EQ("", res.etag);
 
         if (counter++ == 1) {
-            fs.cancel(req);
+            req.reset();
+            loop.stop();
             HTTPNetworkStatusChangePreempt.finish();
         }
     });

@@ -101,7 +101,7 @@ public class MainActivity extends AppCompatActivity {
 
         final ActionBar ab = getSupportActionBar();
         if (ab != null) {
-            ab.setHomeAsUpIndicator(R.drawable.ic_menu);
+            ab.setHomeAsUpIndicator(R.drawable.ic_menu_24dp);
             ab.setDisplayHomeAsUpEnabled(true);
         }
 
@@ -322,8 +322,8 @@ public class MainActivity extends AppCompatActivity {
                         switch (menuItem.getItemId()) {
 
                             case R.id.action_debug:
-                                // Toggle debug mode
-                                mMapView.toggleDebug();
+                                // Cycle map debug options
+                                mMapView.cycleDebugOptions();
                                 toggleFpsCounter(mMapView.isDebugActive());
                                 return true;
 
@@ -347,6 +347,10 @@ public class MainActivity extends AppCompatActivity {
 
                             case R.id.action_press_for_marker:
                                 startActivity(new Intent(getApplicationContext(), PressForMarkerActivity.class));
+                                return true;
+
+                            case R.id.action_manual_zoom:
+                                startActivity(new Intent(getApplicationContext(), ManualZoomActivity.class));
                                 return true;
 
                             case R.id.action_bulk_markers:
